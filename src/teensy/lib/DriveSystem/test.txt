@@ -1,0 +1,149 @@
+#include "DriveSystem.h"
+
+// Konstruktor: Initialisiert alle Motorvariablen und Filterwerte.
+DriveSystem::DriveSystem() {
+    motorVR = 0;
+    motorHR = 0;
+    motorHL = 0;
+    motorVL = 0;
+    lastUpdateTime = millis();
+    for (int i = 0; i < 4; i++) {
+        prevSpeed[i] = 0.0f;
+        currentSpeed[i] = 0.0f;
+    }
+}
+
+// RampSpeed: Erhöht/Verringert den aktuellen Wert in Schritten, die durch rampRate begrenzt sind.
+int DriveSystem::rampSpeed(int current, int target, int rampRate) {
+    int diff = target - current;
+    if (diff > rampRate) {
+        return current + rampRate;
+    } else if (diff < -rampRate) {
+        return current - rampRate;
+    } else {
+        return target;
+    }
+}
+
+// clampSpeed: Beschränkt den Speed auf den zulässigen Bereich von -255 bis 255.
+int DriveSystem::clampSpeed(int speed) {
+    if (speed > 255)
+        return 255;
+    if (speed < -255)
+        return -255;
+    return speed;
+}
+
+// setMotor: Setzt einen einzelnen Motor, indem die Richtungspins und PWM ausgegeben werden.
+void DriveSystem::setMotor(int pinA, int pinB, int pinPWM, int speed) {
+    speed = clampSpeed(speed);
+
+    if (speed == 0) {
+        digitalWrite(pinA, LOW);
+        digitalWrite(pinB, LOW);
+        analogWrite(pinPWM, 0);
+        return;
+    }
+
+    // Vorwärtsbetrieb
+    if (speed >= MIN_SPEED) {
+        digitalWrite(pinA, LOW);
+        digitalWrite(pinB, HIGH);
+        analogWrite(pinPWM, speed);
+    }
+    // Rückwärtsbetrieb
+    else if (speed <= -MIN_SPEED) {
+        digitalWrite(pinA, HIGH);
+        digitalWrite(pinB, LOW);
+        analogWrite(pinPWM, abs(speed));
+    }
+    // Innerhalb des Deadbands
+    else {
+        digitalWrite(pinA, LOW);
+        digitalWrite(pinB, LOW);
+        analogWrite(pinPWM, 0);
+    }
+}
+
+// calcDrive: Berechnet die Motorsollwerte aus den gewünschten Chassisgeschwindigkeiten.
+// vX, vY: Translationalgeschwindigkeiten; omega: Rotationsgeschwindigkeit.
+void DriveSystem::calcDrive(float vX, float vY, float omega) {
+    // Berechne dt (in Sekunden) basierend auf millis()
+    unsigned long now = millis();
+    float dt = (now - lastUpdateTime) / 1000.0f;
+    // if (dt < 0.001f) dt = 0.001f;  // Schutz gegen zu kleine dt
+    lastUpdateTime = now;
+
+    float desired[4];
+
+    // Kinematische Berechnung: Jede Radgeschwindigkeit ist eine Summe aus Translations- und Rotationsanteil.
+    // Formel: desired[i] = vX*cos(theta) + vY*sin(theta) + omega*(motorPosX[i]*sin(theta) - motorPosY[i]*cos(theta))
+    for (int i = 0; i < 4; i++) {
+        float theta = motorAngle[i];
+        float trans = vX * cos(theta) + vY * sin(theta);
+        float rot   = omega * (motorPosX[i] * sin(theta) - motorPosY[i] * cos(theta));
+        desired[i] = trans + rot;
+    }
+
+    // Normierung: Falls ein Wert den MAX_SPEED überschreitet, werden alle Werte skaliert.
+    float maxVal = 0.0f;
+    for (int i = 0; i < 4; i++) {
+        float absVal = fabs(desired[i]);
+        if (absVal > maxVal)
+            maxVal = absVal;
+    }
+    if (maxVal > MAX_SPEED) {
+        float scale = MAX_SPEED / maxVal;
+        for (int i = 0; i < 4; i++) {
+            desired[i] *= scale;
+        }
+    }
+
+    // Ratenbegrenzung (Slew Rate Limiting)
+    float maxChange = RATE_LIMIT * dt;  // Maximale Änderung in dieser Periode
+    for (int i = 0; i < 4; i++) {
+        float diff = desired[i] - prevSpeed[i];
+        if (diff > maxChange)
+            diff = maxChange;
+        else if (diff < -maxChange)
+            diff = -maxChange;
+        currentSpeed[i] = prevSpeed[i] + diff;
+    }
+
+    // Low-Pass-Filterung zur Glättung
+    for (int i = 0; i < 4; i++) {
+        currentSpeed[i] = currentSpeed[i] * (1.0f - LP_ALPHA) + desired[i] * LP_ALPHA;
+        prevSpeed[i] = currentSpeed[i];
+    }
+
+    // Nach der Low-Pass-Filterung:
+for (int i = 0; i < 4; i++) {
+    // Wenn der Betrag von currentSpeed[i] zwischen 0 und MIN_SPEED liegt, setze ihn auf MIN_SPEED
+    if (fabs(currentSpeed[i]) > 0 && fabs(currentSpeed[i]) < MIN_SPEED) {
+        currentSpeed[i] = (currentSpeed[i] > 0) ? MIN_SPEED : -MIN_SPEED;
+    }
+}
+
+
+    // Setze die berechneten Geschwindigkeiten in die jeweiligen Motorvariablen (Reihenfolge: VR, HR, HL, VL)
+    motorVR = (int)currentSpeed[0];
+    motorHR = (int)currentSpeed[1];
+    motorHL = (int)currentSpeed[2];
+    motorVL = (int)currentSpeed[3];
+}
+
+// calcDriveRotation: Rotiert den Eingangsvektor (x,y) um den Winkel theta und ruft calcDrive auf.
+void DriveSystem::calcDriveRotation(float x, float y, float r, float theta) {
+    float rotatedX = x * cos(theta) - y * sin(theta);
+    float rotatedY = x * sin(theta) + y * cos(theta);
+    calcDrive(rotatedX, rotatedY, r);
+}
+
+// drive: Überträgt die berechneten Motorwerte an die Hardware.
+void DriveSystem::drive() {
+    // Reihenfolge: 0 = VR, 1 = HR, 2 = HL, 3 = VL
+    setMotor(motorVRpin[0], motorVRpin[1], motorVRpin[2], motorVR);
+    setMotor(motorHRpin[0], motorHRpin[1], motorHRpin[2], motorHR);
+    setMotor(motorHLpin[0], motorHLpin[1], motorHLpin[2], motorHL);
+    setMotor(motorVLpin[0], motorVLpin[1], motorVLpin[2], motorVL);
+}

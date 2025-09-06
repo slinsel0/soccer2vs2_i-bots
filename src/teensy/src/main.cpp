@@ -1,4 +1,11 @@
 #include <Arduino.h>
+#include "DriveSystem.h"
+#include "LD19.h" 
+#include "LidarProcessing.h"
+#include <Wire.h>
+#include "GyroSystem.h"
+
+
 
 // put function declarations here:
 int myFunction(int, int);
