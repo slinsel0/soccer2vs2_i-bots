@@ -10,6 +10,8 @@
 COBSPacketSerial cobsSerial;
 FastCRC32 CRC32;
 
+DriveSystem Drive;
+
 // Frame-Struct exakt 22 Bytes, little-endian
 struct __attribute__((packed)) VectorCmd {
   uint8_t  msg_id;   // 1 = velocity command
@@ -91,4 +93,13 @@ void loop() {
       lastBlink = millis();
     }
   }
+
+
+
+Drive.calcDrive(last_vx,0,0);
+
+Drive.drive();
+
+
+
 }
