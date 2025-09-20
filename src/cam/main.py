@@ -24,12 +24,12 @@ SER_BAUD = 2_000_000          # USB-CDC, unkritisch aber ok
 SER_RATE_HZ = 200             # Sende-Frequenz
 
 # --- Kalibrierung (pro Kamera separate Datei empfohlen) ---
-CALIB_CAM0 = "fisheye_cam0_1280x800.npz"   # K, D, image_size
-CALIB_CAM1 = "fisheye_cam1_1280x800.npz"   # K, D, image_size
-FISHEYE_BALANCE = 0.50                      # 0..1
+CALIB_CAM0 = "ioi.npz"   # K, D, image_size
+CALIB_CAM1 = "oioio.npz"   # K, D, image_size
+FISHEYE_BALANCE = 0.80                      # 0..1
 
 # --- Kamera-Steuerung ---
-EXPOSURE_TIME_US = 30000
+EXPOSURE_TIME_US = 15000
 FPS = 30
 
 # --- BallTracker-Konfig (extern aus JSON) ---
@@ -74,9 +74,9 @@ class FisheyeUndistorter:
 # -----------  SERIELLER SENDER (pi_tx integriert) ----------
 # ============================================================
 
-# Frame-Layout: <BBIfffI  (msg_id:uint8, seq:uint8, t_us:uint32, vx,vy,omega:float32, crc32:uint32)
+# Frame-Layout: <BBIfff  (msg_id:uint8, seq:uint8, t_us:uint32, vx:float, vy:float, cam_id:float)
 FMT_BODY = "<BBIfff"
-MSG_ID_VELOCITY = 1  # wir verwenden Felder als Transport für x,y (px) + omega=0
+MSG_ID_VELOCITY = 1  # Felder transportieren x,y (px) + Kamera-ID (als float)
 
 def _cobs_encode(buf: bytes) -> bytes:
     # Kleine, schnelle COBS-Implementierung genügt hier; du kannst auch 'from cobs import cobs' nutzen
@@ -128,13 +128,13 @@ class SerialCOBSSender(threading.Thread):
                 pass
             self.ser = None
 
-    def _make_frame(self, vx: float, vy: float, omega: float) -> bytes:
+    def _make_frame(self, vx: float, vy: float, cam_id_f: float) -> bytes:
         t_us = time.perf_counter_ns() // 1000
         body = struct.pack(FMT_BODY,
                            MSG_ID_VELOCITY,
                            self.seq & 0xFF,
                            t_us & 0xFFFFFFFF,
-                           float(vx), float(vy), float(omega))
+                           float(vx), float(vy), float(cam_id_f))
         crc = zlib.crc32(body) & 0xFFFFFFFF
         full = body + struct.pack("<I", crc)
         self.seq = (self.seq + 1) & 0xFF
@@ -151,17 +151,17 @@ class SerialCOBSSender(threading.Thread):
         while not self.stop_event.is_set():
             st = self.shared.get()
             if st["camera_id"] >= 0:
-                # --- WERTE SCHAICKEN ---
-                # Option 1 (aktuell): Pixel direkt übertragen
-                vx, vy, omega = float(st["x"]), float(st["y"]), 0.0
+                # --- WERTE SCHICKEN ---
+                # Option 1 (aktuell): Pixel direkt übertragen + Kamera-ID (als float)
+                vx, vy, cam_id_f = float(st["x"]), float(st["y"]), float(st["camera_id"])
 
                 # Option 2 (alternativ): auf −1..1 normieren:
                 # vx = np.clip(st["x"] / (self.shared.frame_width/2.0), -1.0, 1.0)
                 # vy = np.clip(st["y"] / (self.shared.frame_height), 0.0, 1.0)
-                # omega = 0.0
+                # cam_id_f = float(st["camera_id"])
 
                 try:
-                    self.ser.write(self._make_frame(vx, vy, omega))
+                    self.ser.write(self._make_frame(vx, vy, cam_id_f))
                 except Exception:
                     # Ignorieren, nächster Versuch
                     pass
@@ -197,7 +197,7 @@ class BallTracker:
         self.orange_lower = np.array([cfg['h_lower'], cfg['s_lower'], cfg['v_lower']])
         self.orange_upper = np.array([cfg['h_upper'], cfg['s_upper'], cfg['v_upper']])
 
-        k = max(1, cfg.get('kernel_size', 3))
+        k = max(1, cfg.get('kernel_size', 2))
         self.erosion_kernel = np.ones((k, k), np.uint8)
         self.dilation_kernel = np.ones((k, k), np.uint8)
 
@@ -348,7 +348,8 @@ def camera_readout(camera_index: int,
         "AwbEnable": False,
         "Sharpness": 1.0,
         "Contrast": 1.0,
-        "Saturation": 1.0
+        "Saturation": 1.2,
+        "NoiseReductionMode": libcamera.controls.draft.NoiseReductionModeEnum.Off
     }
 
     cfg = picam.create_video_configuration(main={"format": "RGB888", "size": (W, H)},

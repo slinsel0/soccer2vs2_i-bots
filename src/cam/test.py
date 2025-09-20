@@ -50,13 +50,21 @@ controls = {
     "Contrast": 1.0,
     "Saturation": 1.0
 }
+
+
 if HAS_LIBCAMERA_DRAFT:
     controls["NoiseReductionMode"] = libcamera.controls.draft.NoiseReductionModeEnum.Off
 
-config = picam2.create_video_configuration(
-    main={"format": "RGB888", "size": (WIDTH, HEIGHT)},
-    controls=controls
-)
+config = picam2.create_video_configuration(main={"format": "RGB888", "size": (WIDTH, HEIGHT)},
+                                           controls=controls)
+    # Falls deine Kalibrierung ohne Flip gemacht wurde: keine Transforms setzen!
+transform = libcamera.Transform(hflip=True, vflip=True)
+config["transform"] = transform
+
+
+
+
+
 picam2.configure(config)
 picam2.start()
 time.sleep(0.5)  # kurze Warmup-Zeit

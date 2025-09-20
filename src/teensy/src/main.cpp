@@ -9,8 +9,12 @@
 
 COBSPacketSerial cobsSerial;
 FastCRC32 CRC32;
+GyroSystem gyro;
 
 DriveSystem Drive;
+
+
+float g_a =0;
 
 // Frame-Struct exakt 22 Bytes, little-endian
 struct __attribute__((packed)) VectorCmd {
@@ -65,17 +69,28 @@ void onPacketReceived(const uint8_t* buffer, size_t size) {
 }
 
 void setup() {
+      gyro.begin();
+
   pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(2000000);
   while (!Serial && millis() < 2000) { }
   cobsSerial.setStream(&Serial);
   cobsSerial.setPacketHandler(&onPacketReceived);
+  Wire1.begin();
+  Wire2.begin();
+  Wire.begin();
+    gyro.begin();
 }
 
 uint32_t lastBlink = 0;
 
 void loop() {
   cobsSerial.update(); // wichtig: ruft intern den Decoder auf
+  gyro.update();
+  g_a = gyro.getAngleDegrees();
+Drive.calcDrive(-last_vx,last_vy*2,g_a*0.5);   
+Drive.drive();
+
 
   // Demo: LED-Frequenz zeigt Traffic
   if (got_cmd) {
@@ -84,6 +99,19 @@ void loop() {
       lastBlink = millis();
     }
     got_cmd = false;
+
+
+
+  if (last_omega == 0){
+    last_vy *= -last_vy;
+  }
+  else {
+    last_vy = +last_vy;
+  }
+  
+
+
+
 
     // >>> Hier: Deine Regelung / Motorbefehle mit last_vx, last_vy, last_omega
     // z.B. setVelocity(last_vx, last_vy, last_omega);
@@ -96,9 +124,7 @@ void loop() {
 
 
 
-Drive.calcDrive(last_vx,0,0);
 
-Drive.drive();
 
 
 
