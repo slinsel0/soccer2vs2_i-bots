@@ -86,7 +86,7 @@ void DriveSystem::calcDrive(float vX, float vY, float r) {
     float final_speed_hl = transHL_comp + r;
     float final_speed_vl = transVL_comp + r;
 
-    const float deadband = 3.0f;
+    const float deadband = 4.0f;
     motorVR = (abs(final_speed_vr) < deadband) ? 0 : (final_speed_vr > 0 ? map(final_speed_vr, 0, maxSpeed, minSpeed, MAX_PWM_OUTPUT ) : map(final_speed_vr, -maxSpeed, 0, -MAX_PWM_OUTPUT , -minSpeed));
     motorHR = (abs(final_speed_hr) < deadband) ? 0 : (final_speed_hr > 0 ? map(final_speed_hr, 0, maxSpeed, minSpeed, MAX_PWM_OUTPUT ) : map(final_speed_hr, -maxSpeed, 0, -MAX_PWM_OUTPUT , -minSpeed));
     motorHL = (abs(final_speed_hl) < deadband) ? 0 : (final_speed_hl > 0 ? map(final_speed_hl, 0, maxSpeed, minSpeed, MAX_PWM_OUTPUT ) : map(final_speed_hl, -maxSpeed, 0, -MAX_PWM_OUTPUT , -minSpeed));

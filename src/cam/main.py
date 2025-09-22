@@ -29,7 +29,7 @@ CALIB_CAM1 = "oioio.npz"   # K, D, image_size
 FISHEYE_BALANCE = 0.80                      # 0..1
 
 # --- Kamera-Steuerung ---
-EXPOSURE_TIME_US = 15000
+EXPOSURE_TIME_US = 50000
 FPS = 30
 
 # --- BallTracker-Konfig (extern aus JSON) ---
@@ -241,16 +241,8 @@ class BallTracker:
             return self._exclusion_masks[cam_id]
         h, w = shape[:2]
         mask = np.full((h, w), 255, dtype=np.uint8)
-        if cam_id == 1:
-            tri1 = self._poly([(63, 479), (226, 337), (226, 479)])
-            tri2 = self._poly([(607, 479), (415, 345), (415, 479)])
-            rect = self._poly([(226, 381), (415, 381), (415, 478), (226, 478)])
-            cv2.fillPoly(mask, [tri1, tri2, rect], 0)
-        elif cam_id == 0:
-            curve_pts = self._poly([(19, 479), (142, 368), (325, 226),
-                                    (426, 304), (503, 377), (490, 469)])
-            curve_closed = np.vstack([curve_pts, [(w - 1, h - 1), (0, h - 1)]])
-            cv2.fillPoly(mask, [curve_closed], 0)
+    
+         
         self._exclusion_masks[cam_id] = mask
         return mask
 

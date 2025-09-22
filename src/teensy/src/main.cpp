@@ -6,6 +6,7 @@
 #include "GyroSystem.h"
 #include <PacketSerial.h>   // by Christopher Baker
 #include <FastCRC.h>        // by Frank Boesing
+#include <PIDController.h>
 
 COBSPacketSerial cobsSerial;
 FastCRC32 CRC32;
@@ -13,8 +14,20 @@ GyroSystem gyro;
 
 DriveSystem Drive;
 
+PIDController pidg(1.275,  0.0001f,   140.0f, 1.0f,  45.0f);
+PIDController pidx(2.0f, 0.0001f, 40.0f, 1.0f, 10.0f);
+PIDController pidy(2.0f, 0.0001f, 40.0f, 1.0f, 10.0f);
+
 
 float g_a =0;
+float p_x= 0;
+float p_y= 0;
+float pdg = 0.0f;
+float fp_x =0.0f;
+float fp_y =0.0f;
+
+
+
 
 // Frame-Struct exakt 22 Bytes, little-endian
 struct __attribute__((packed)) VectorCmd {
@@ -80,34 +93,54 @@ void setup() {
   Wire2.begin();
   Wire.begin();
     gyro.begin();
+  LidarBegin();
 }
 
 uint32_t lastBlink = 0;
 
 void loop() {
+ lidaar();   // Funktion für LiDAR-Daten
+
   cobsSerial.update(); // wichtig: ruft intern den Decoder auf
   gyro.update();
   g_a = gyro.getAngleDegrees();
-Drive.calcDrive(-last_vx,last_vy*2,g_a*0.5);   
-Drive.drive();
+
+  float pdg = pidg.updatePD(g_a); // pdg bleibt wahrscheinlich float
+
+
+
+p_x =Player.x;
+p_y =Player.y;
+
+
+fp_x =pidx.updatePD(p_x);
+fp_y =pidy.updatePD(p_y);
+
+
+
+  Drive.calcDrive(fp_x,fp_y,-pdg);
+  Drive.drive();
+
+
+
 
 
   // Demo: LED-Frequenz zeigt Traffic
-  if (got_cmd) {
-    if (millis() - lastBlink > 50) {
-      digitalWriteFast(LED_BUILTIN, !digitalReadFast(LED_BUILTIN));
-      lastBlink = millis();
-    }
-    got_cmd = false;
+  // if (got_cmd) {
+  //   if (millis() - lastBlink > 50) {
+  //     digitalWriteFast(LED_BUILTIN, !digitalReadFast(LED_BUILTIN));
+  //     lastBlink = millis();
+  //   }
+  //   got_cmd = false;
 
 
 
-  if (last_omega == 0){
-    last_vy *= -last_vy;
-  }
-  else {
-    last_vy = +last_vy;
-  }
+  // if (last_omega == 0){
+  //   last_vy *= -last_vy;
+  // }
+  // else {
+  //   last_vy = +last_vy;
+  // }
   
 
 
@@ -115,12 +148,12 @@ Drive.drive();
 
     // >>> Hier: Deine Regelung / Motorbefehle mit last_vx, last_vy, last_omega
     // z.B. setVelocity(last_vx, last_vy, last_omega);
-  } else {
-    if (millis() - lastBlink > 500) {
-      digitalWriteFast(LED_BUILTIN, !digitalReadFast(LED_BUILTIN));
-      lastBlink = millis();
-    }
-  }
+  // } else {
+  //   if (millis() - lastBlink > 500) {
+  //     digitalWriteFast(LED_BUILTIN, !digitalReadFast(LED_BUILTIN));
+  //     lastBlink = millis();
+  //   }
+  // }
 
 
 

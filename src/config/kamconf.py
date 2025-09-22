@@ -178,100 +178,100 @@ def main_calibration_auto_hsv():
         current_frame_for_roi = frame_rgb
         display_frame = current_frame_for_roi.copy() # Kopie für Zeichnungen
 
-        # if roi_selected_for_processing:
-        #     x1, y1 = roi_points[0]
-        #     x2, y2 = roi_points[1]
-        #     roi_x_start, roi_x_end = min(x1, x2), max(x1, x2)
-        #     roi_y_start, roi_y_end = min(y1, y2), max(y1, y2)
+        if roi_selected_for_processing:
+            x1, y1 = roi_points[0]
+            x2, y2 = roi_points[1]
+            roi_x_start, roi_x_end = min(x1, x2), max(x1, x2)
+            roi_y_start, roi_y_end = min(y1, y2), max(y1, y2)
 
-        #     if roi_x_end > roi_x_start and roi_y_end > roi_y_start:
-        #         selected_roi_bgr = current_frame_for_roi[roi_y_start:roi_y_end, roi_x_start:roi_x_end]
-        #         if selected_roi_bgr.size > 0:
-        #             selected_roi_hsv = cv2.cvtColor(selected_roi_bgr, cv2.COLOR_BGR2HSV)
+            if roi_x_end > roi_x_start and roi_y_end > roi_y_start:
+                selected_roi_bgr = current_frame_for_roi[roi_y_start:roi_y_end, roi_x_start:roi_x_end]
+                if selected_roi_bgr.size > 0:
+                    selected_roi_hsv = cv2.cvtColor(selected_roi_bgr, cv2.COLOR_BGR2HSV)
                     
-        #             h_vals = selected_roi_hsv[:, :, 0].flatten()
-        #             s_vals = selected_roi_hsv[:, :, 1].flatten()
-        #             v_vals = selected_roi_hsv[:, :, 2].flatten()
+                    h_vals = selected_roi_hsv[:, :, 0].flatten()
+                    s_vals = selected_roi_hsv[:, :, 1].flatten()
+                    v_vals = selected_roi_hsv[:, :, 2].flatten()
 
-        #             # Verwende Percentile für Robustheit gegen Ausreißer
-        #             margin_h, margin_sv = 5, 20 # Kleinere Margin für H, größere für S/V
+                    # Verwende Percentile für Robustheit gegen Ausreißer
+                    margin_h, margin_sv = 5, 20 # Kleinere Margin für H, größere für S/V
 
-        #             h_min = max(0, int(np.percentile(h_vals, 5)) - margin_h)
-        #             h_max = min(179, int(np.percentile(h_vals, 95)) + margin_h)
-        #             s_min = max(0, int(np.percentile(s_vals, 5)) - margin_sv)
-        #             s_max = min(255, int(np.percentile(s_vals, 95)) + margin_sv)
-        #             v_min = max(0, int(np.percentile(v_vals, 5)) - margin_sv)
-        #             v_max = min(255, int(np.percentile(v_vals, 95)) + margin_sv)
+                    h_min = max(0, int(np.percentile(h_vals, 5)) - margin_h)
+                    h_max = min(179, int(np.percentile(h_vals, 95)) + margin_h)
+                    s_min = max(0, int(np.percentile(s_vals, 5)) - margin_sv)
+                    s_max = min(255, int(np.percentile(s_vals, 95)) + margin_sv)
+                    v_min = max(0, int(np.percentile(v_vals, 5)) - margin_sv)
+                    v_max = min(255, int(np.percentile(v_vals, 95)) + margin_sv)
 
-        #             # Sicherstellen, dass lower <= upper
-        #             if h_min > h_max: h_min, h_max = h_max, h_min if h_max > 0 else (0,10) # Fallback
-        #             if s_min > s_max: s_min, s_max = s_max, s_min if s_max > 0 else (0,10)
-        #             if v_min > v_max: v_min, v_max = v_max, v_min if v_max > 0 else (0,10)
+                    # Sicherstellen, dass lower <= upper
+                    if h_min > h_max: h_min, h_max = h_max, h_min if h_max > 0 else (0,10) # Fallback
+                    if s_min > s_max: s_min, s_max = s_max, s_min if s_max > 0 else (0,10)
+                    if v_min > v_max: v_min, v_max = v_max, v_min if v_max > 0 else (0,10)
 
 
-        #             cv2.setTrackbarPos('H_lower', 'Controls', h_min)
-        #             cv2.setTrackbarPos('S_lower', 'Controls', s_min)
-        #             cv2.setTrackbarPos('V_lower', 'Controls', v_min)
-        #             cv2.setTrackbarPos('H_upper', 'Controls', h_max)
-        #             cv2.setTrackbarPos('S_upper', 'Controls', s_max)
-        #             cv2.setTrackbarPos('V_upper', 'Controls', v_max)
-        #             print(f"Auto HSV: H({h_min}-{h_max}), S({s_min}-{s_max}), V({v_min}-{v_max})")
-        #     roi_selected_for_processing = False # Flag zurücksetzen
+                    cv2.setTrackbarPos('H_lower', 'Controls', h_min)
+                    cv2.setTrackbarPos('S_lower', 'Controls', s_min)
+                    cv2.setTrackbarPos('V_lower', 'Controls', v_min)
+                    cv2.setTrackbarPos('H_upper', 'Controls', h_max)
+                    cv2.setTrackbarPos('S_upper', 'Controls', s_max)
+                    cv2.setTrackbarPos('V_upper', 'Controls', v_max)
+                    print(f"Auto HSV: H({h_min}-{h_max}), S({s_min}-{s_max}), V({v_min}-{v_max})")
+            roi_selected_for_processing = False # Flag zurücksetzen
 
-        # # Parameter von Trackbars holen (könnten gerade durch ROI-Logik aktualisiert worden sein)
-        # current_params = get_params_from_trackbars()
+        # Parameter von Trackbars holen (könnten gerade durch ROI-Logik aktualisiert worden sein)
+        current_params = get_params_from_trackbars()
 
-        # # Verarbeitung basierend auf current_params
-        # orange_lower = np.array([current_params['h_lower'], current_params['s_lower'], current_params['v_lower']])
-        # orange_upper = np.array([current_params['h_upper'], current_params['s_upper'], current_params['v_upper']])
-        # k_size = current_params['kernel_size']
-        # erosion_kernel = np.ones((k_size, k_size), np.uint8)
-        # dilation_kernel = np.ones((k_size, k_size), np.uint8)
+        # Verarbeitung basierend auf current_params
+        orange_lower = np.array([current_params['h_lower'], current_params['s_lower'], current_params['v_lower']])
+        orange_upper = np.array([current_params['h_upper'], current_params['s_upper'], current_params['v_upper']])
+        k_size = current_params['kernel_size']
+        erosion_kernel = np.ones((k_size, k_size), np.uint8)
+        dilation_kernel = np.ones((k_size, k_size), np.uint8)
 
-        # hsv = cv2.cvtColor(current_frame_for_roi, cv2.COLOR_BGR2HSV)
-        # mask = cv2.inRange(hsv, orange_lower, orange_upper)
+        hsv = cv2.cvtColor(current_frame_for_roi, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, orange_lower, orange_upper)
         
-        # eroded = mask
-        # if current_params['erode_iter'] > 0:
-        #     eroded = cv2.erode(mask, erosion_kernel, iterations=current_params['erode_iter'])
-        # dilated = eroded
-        # if current_params['dilate_iter'] > 0:
-        #     dilated = cv2.dilate(eroded, dilation_kernel, iterations=current_params['dilate_iter'])
-        # closed_morph = cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, dilation_kernel, iterations=1)
-        # mask_for_blob = cv2.bitwise_not(closed_morph)
+        eroded = mask
+        if current_params['erode_iter'] > 0:
+            eroded = cv2.erode(mask, erosion_kernel, iterations=current_params['erode_iter'])
+        dilated = eroded
+        if current_params['dilate_iter'] > 0:
+            dilated = cv2.dilate(eroded, dilation_kernel, iterations=current_params['dilate_iter'])
+        closed_morph = cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, dilation_kernel, iterations=1)
+        mask_for_blob = cv2.bitwise_not(closed_morph)
 
-        # blob_params_obj.minThreshold = current_params['minThreshold']
-        # blob_params_obj.maxThreshold = current_params['maxThreshold']
-        # blob_params_obj.thresholdStep = current_params['thresholdStep']
-        # blob_params_obj.filterByArea = True
-        # blob_params_obj.minArea = current_params['min_blob_area']
-        # blob_params_obj.maxArea = current_params['max_blob_area']
-        # blob_params_obj.filterByCircularity = True
-        # blob_params_obj.minCircularity = current_params['min_circularity']
-        # blob_params_obj.filterByConvexity = True
-        # blob_params_obj.minConvexity = current_params['min_convexity']
-        # blob_params_obj.filterByInertia = True
-        # blob_params_obj.minInertiaRatio = current_params['min_inertia_ratio']
-        # blob_params_obj.minDistBetweenBlobs = current_params['minDistBetweenBlobs']
-        # detector = cv2.SimpleBlobDetector_create(blob_params_obj)
-        # keypoints = detector.detect(mask_for_blob)
+        blob_params_obj.minThreshold = current_params['minThreshold']
+        blob_params_obj.maxThreshold = current_params['maxThreshold']
+        blob_params_obj.thresholdStep = current_params['thresholdStep']
+        blob_params_obj.filterByArea = True
+        blob_params_obj.minArea = current_params['min_blob_area']
+        blob_params_obj.maxArea = current_params['max_blob_area']
+        blob_params_obj.filterByCircularity = True
+        blob_params_obj.minCircularity = current_params['min_circularity']
+        blob_params_obj.filterByConvexity = True
+        blob_params_obj.minConvexity = current_params['min_convexity']
+        blob_params_obj.filterByInertia = True
+        blob_params_obj.minInertiaRatio = current_params['min_inertia_ratio']
+        blob_params_obj.minDistBetweenBlobs = current_params['minDistBetweenBlobs']
+        detector = cv2.SimpleBlobDetector_create(blob_params_obj)
+        keypoints = detector.detect(mask_for_blob)
 
-        # frame_with_keypoints = display_frame # display_frame ist Kopie von current_frame_for_roi
-        # if keypoints:
-        #     frame_with_keypoints = cv2.drawKeypoints(display_frame, keypoints, np.array([]), (0,0,255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        frame_with_keypoints = display_frame # display_frame ist Kopie von current_frame_for_roi
+        if keypoints:
+            frame_with_keypoints = cv2.drawKeypoints(display_frame, keypoints, np.array([]), (0,0,255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
-        # # Zeichne das ROI-Rechteck, wenn es ausgewählt wird oder wurde
-        # if drawing_roi and len(roi_points) == 1: # Während des Ziehens
-        #      # Holen der aktuellen Mausposition ist hier schwierig ohne sie zu übergeben
-        #      # Einfacher: Rechteck erst nach Loslassen zeichnen oder Callback muss auch frame malen
-        #      pass # Temporäres Zeichnen kann komplex sein, wir zeichnen das finale Rechteck
-        # if len(roi_points) == 2: # ROI ist ausgewählt
-        #     cv2.rectangle(frame_with_keypoints, roi_points[0], roi_points[1], (0, 255, 0), 2)
+        # Zeichne das ROI-Rechteck, wenn es ausgewählt wird oder wurde
+        if drawing_roi and len(roi_points) == 1: # Während des Ziehens
+             # Holen der aktuellen Mausposition ist hier schwierig ohne sie zu übergeben
+             # Einfacher: Rechteck erst nach Loslassen zeichnen oder Callback muss auch frame malen
+             pass # Temporäres Zeichnen kann komplex sein, wir zeichnen das finale Rechteck
+        if len(roi_points) == 2: # ROI ist ausgewählt
+            cv2.rectangle(frame_with_keypoints, roi_points[0], roi_points[1], (0, 255, 0), 2)
 
 
-        cv2.imshow('Original', frame_rgb)
-        #cv2.imshow('Mask', mask)
-        #cv2.imshow('Processed Mask for Blob', mask_for_blob)
+        cv2.imshow('Original', display_frame)
+        cv2.imshow('Mask', mask)
+        cv2.imshow('Processed Mask for Blob', mask_for_blob)
 
         key = cv2.waitKey(30) & 0xFF
         if key == ord('q'):

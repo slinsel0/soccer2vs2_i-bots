@@ -43,7 +43,7 @@ std::vector<Vec2> EnemysFiltered;
 // --- LiDAR-Sensor ---
 // Erzeuge eine globale Instanz deines LD19-Sensors
  LD19 lidarsensor;
-extern GyroSystem gyros;
+extern GyroSystem gyro;
 
 // --- Funktionen ---
 
@@ -277,7 +277,7 @@ void calculateBotPos() {
 
 void lidaar() {
   lidarsensor.loop();
-  double angleRadians = gyros.getAngleRadians();
+  double angleRadians = gyro.getAngleRadians();
   double cosTheta = cos(angleRadians);
   double sinTheta = sin(angleRadians);
 
