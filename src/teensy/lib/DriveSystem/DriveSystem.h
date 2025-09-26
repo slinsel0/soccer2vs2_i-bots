@@ -19,7 +19,7 @@ static const uint8_t motorHLpin[] = {12, 11, 18}; // HL: CCW1, CW1, PWM
 // ----------------- MinMaxMotor -------------------
 #define maxSpeed     120  // maximaler Geschwindigkeitswert
 #define minSpeed     27    // minimaler Speed
-#define maxRotation  40    // maximale Rotationsgeschwindigkeit
+#define maxRotation  80    // maximale Rotationsgeschwindigkeit
 
 
 

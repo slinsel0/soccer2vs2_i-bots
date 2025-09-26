@@ -271,9 +271,10 @@ class BallTracker:
             vis = cv2.drawKeypoints(vis, [kp], None, (0, 0, 255),
                                     cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
             x_cv, y_cv = kp.pt
-            x_trans = x_cv - (W / 2.0)    # links-negativ, rechts-positiv
-            y_trans = H - y_cv            # Ursprung unten-links
-            coords = (x_trans, y_trans)
+            cx, cy = (W * 0.5), (H * 0.5)
+            x_rel = x_cv - cx
+            y_rel = cy - y_cv
+            coords = (x_rel, y_rel)
             self.last_detection_time[cam_id] = time.time()
 
         return vis, mask_inv, coords, size

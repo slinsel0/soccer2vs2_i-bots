@@ -24,6 +24,19 @@ void GyroSystem::begin()
     // Optional: Additional config, offsets, calibration
     bno.setExtCrystalUse(true);
 
+    bno.setMode(OPERATION_MODE_CONFIG);
+      delay(25);
+    
+    bno.setMode(OPERATION_MODE_IMUPLUS);
+
+          delay(25);
+
+
+
+    
+
+    
+
     Serial.println("BNO055 initialized.");
 }
 

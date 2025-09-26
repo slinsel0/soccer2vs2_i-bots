@@ -10,13 +10,17 @@
 
 COBSPacketSerial cobsSerial;
 FastCRC32 CRC32;
+Adafruit_BNO055 bno(55, 0x28); // 0x28 oder 0x29, je nach ADR-Pin
+
 GyroSystem gyro;
 
 DriveSystem Drive;
 
-PIDController pidg(1.275,  0.0001f,   140.0f, 1.0f,  45.0f);
-PIDController pidx(2.0f, 0.0001f, 40.0f, 1.0f, 10.0f);
-PIDController pidy(2.0f, 0.0001f, 40.0f, 1.0f, 10.0f);
+PIDController pidg(0.45f,  0.0f,   20.0f, 1.0f,  0.0f);
+PIDController pidx(0.5f, 0.0001f, 40.0f, 1.0f, 10.0f);
+PIDController pidy(0.5f, 0.0001f, 40.0f, 1.0f, 10.0f);
+
+
 
 
 float g_a =0;
@@ -93,6 +97,7 @@ void setup() {
   Wire2.begin();
   Wire.begin();
     gyro.begin();
+    
   LidarBegin();
 }
 
@@ -113,49 +118,44 @@ p_x =Player.x;
 p_y =Player.y;
 
 
-fp_x =pidx.updatePD(p_x);
-fp_y =pidy.updatePD(p_y);
-
-
-
-  Drive.calcDrive(fp_x,fp_y,-pdg);
-  Drive.drive();
+fp_x =pidx.updatePD(-last_vx);
+fp_y =pidy.updatePD(-last_vy);
 
 
 
 
 
-  // Demo: LED-Frequenz zeigt Traffic
-  // if (got_cmd) {
-  //   if (millis() - lastBlink > 50) {
-  //     digitalWriteFast(LED_BUILTIN, !digitalReadFast(LED_BUILTIN));
-  //     lastBlink = millis();
-  //   }
-  //   got_cmd = false;
 
 
 
-  // if (last_omega == 0){
-  //   last_vy *= -last_vy;
-  // }
-  // else {
-  //   last_vy = +last_vy;
-  // }
+  if (got_cmd) {
+    if (millis() - lastBlink > 50) {
+      digitalWriteFast(LED_BUILTIN, !digitalReadFast(LED_BUILTIN));
+      lastBlink = millis();
+        Drive.calcDrive(-last_vx,-last_vy,-pdg);
+
+    }
+    got_cmd = false;
+
+
+
   
 
 
 
 
-    // >>> Hier: Deine Regelung / Motorbefehle mit last_vx, last_vy, last_omega
-    // z.B. setVelocity(last_vx, last_vy, last_omega);
-  // } else {
-  //   if (millis() - lastBlink > 500) {
-  //     digitalWriteFast(LED_BUILTIN, !digitalReadFast(LED_BUILTIN));
-  //     lastBlink = millis();
-  //   }
-  // }
+    //z.B. setVelocity(last_vx, last_vy, last_omega);
+  } else {
+    if (millis() - lastBlink > 500) {
+      digitalWriteFast(LED_BUILTIN, !digitalReadFast(LED_BUILTIN));
+      lastBlink = millis();
+      Drive.calcDrive(0,0,-pdg);
+
+    }
+  }
 
 
+  Drive.drive();
 
 
 
