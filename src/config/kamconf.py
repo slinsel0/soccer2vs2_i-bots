@@ -8,9 +8,9 @@ import libcamera # Für libcamera.Transform
 CONFIG_PATH = 'ball_tracker_config.json'
 
 # Kameraeinstellungen
-WIDTH = 651 
-HEIGHT = 487
-EXPOSURE_TIME_US = 50000
+WIDTH = 640 
+HEIGHT = 480
+EXPOSURE_TIME_US = 30000
 CAMERA_INDEX = 0
 
 # Globale Variablen für ROI-Auswahl

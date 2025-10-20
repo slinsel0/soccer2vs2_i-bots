@@ -8,6 +8,7 @@
 #include <FastCRC.h>        // by Frank Boesing
 #include <PIDController.h>
 #include <math.h>
+#include <outofbounce.h>
 
 COBSPacketSerial cobsSerial;
 FastCRC32 CRC32;
@@ -17,11 +18,24 @@ GyroSystem gyro;
 
 DriveSystem Drive;
 
-PIDController pidg(0.45f,  0.0f,   50.0f, 1.5f,  0.0f);
-PIDController pidx(1.725f, 0.0f, 20.0f, 1.5f, 0.0f);
-PIDController pidy(1.725f, 0.0, 20.0f, 1.5f, 0.0f);
+PIDController pidg(5.25f,  0.00001f,   2.50f, 1.5f,  0.0f);
+PIDController pidx(2.60, 0.0f, 10.0f, 1.5f, 0.0f);
+PIDController pidy(2.6, 0.0, 10.0f, 1.5f, 0.0f);
 
-
+static const BoundsConfig kBounds = {
+  /* xLimit     */ 80.0f,    // halbe kurze Seite
+  /* yLimit     */ 100.5f,   // halbe lange Seite
+  /* softMargin */ 26.0f,    // 20 cm vor Linie: Soft-Bremse
+  /* hardMargin */  18.5f,    // 8 cm vor Linie: Hard-Pushback
+  /* kPush      */  0.85f,    // mittlerer Rückstoß
+  /* maxSoft    */ 70.0f,    // max Speed in Soft-Zone
+  /* maxHard    */ 46.0f     // max Speed in Hard-Zone
+};
+static const BoundsExtras kExtras = {
+  /* yEscapeThresh           */ 20.0f,  // "hinter/vor mir" in lokalen cm
+  /* xEscapeThresh           */ 30.0f,  // "deutlich andere Seite" in lokalen cm
+  /* enableDirectionalEscape */ false
+};
 
 
 float g_a =0;
@@ -53,9 +67,7 @@ volatile uint32_t last_cmd_ms = 0;
 
 constexpr uint32_t CMD_TIMEOUT_MS = 200; // reset quickly when command stream stalls
 
-constexpr float CM_TO_M = 0.01f;
-constexpr float M_TO_MM = 100.0f;
-constexpr float DEFAULT_SAFETY_DT = 0.0005f; // 5 ms fallback for safety controller
+
 
 void onPacketReceived(const uint8_t* buffer, size_t size) {
   if (size < sizeof(VectorCmd)) return;
@@ -103,7 +115,7 @@ static Vec2 computeBehindBallTarget(float ballX, float ballY) {
   Vec2 offset = {0.0f, 0.0f};
 
   if (ballY > 0.0f) {
-    if (fabsf(ballX) < 15.0f) {
+    if (fabsf(ballX) < 10.0f) {
       // Ball mittig vorne: keine Versetzung notwendig
 
      offset.x = 0.0f;
@@ -114,11 +126,11 @@ static Vec2 computeBehindBallTarget(float ballX, float ballY) {
     }
   } else {
     if (ballX < 0.0f) {
-      offset.x = -55.0f;
-      offset.y = 30.0f;
+      offset.x = -35.0f;
+      offset.y = 75.0f;
     } else {
-      offset.x = 55.0f;
-      offset.y = 30.0f;
+      offset.x = 35.0f;
+      offset.y = 75.0f;
     }
   }
 
@@ -133,69 +145,6 @@ static Vec2 computeBehindBallTarget(float ballX, float ballY) {
 
 
 
-constexpr float PLAYING_FIELD_WIDTH_CM  = 140.0f;
-constexpr float PLAYING_FIELD_LENGTH_CM = 208.0f;
-constexpr float OUTER_AREA_CM           = 12.0f;  // not used directly yet, kept for clarity
-constexpr float GOAL_WIDTH_CM           = 60.0f;
-constexpr float PENALTY_AREA_DEPTH_CM   = 80.0f;
-constexpr float SAFETY_MARGIN_TO_LINE   = 1.0f;
-constexpr float SAFETY_BLEND_DISTANCE   = 1.0f;
-
-// Simple guard that keeps the robot from remaining inside the goal corridors.
-// It overrides the commanded translation when we are within the penalty depth in
-// front of a goal (based on the official field dimensions) and gradually locks
-// the lateral axis while pushing back toward the field center.
-static Vec2 applyGoalBoundaryGuard(const Vec2& desiredCmd, Vec2 robotPosCm) {
-  Vec2 adjusted = desiredCmd;
-
-  const float fieldHalfY         = PLAYING_FIELD_LENGTH_CM * 0.5f;
-  const float penaltyEntryY      = fieldHalfY - PENALTY_AREA_DEPTH_CM;
-  const float lockStartY         = fieldHalfY - SAFETY_MARGIN_TO_LINE;
-  const float blendStartY        = fieldHalfY - SAFETY_BLEND_DISTANCE;
-  const float corridorHalfWidth  = (GOAL_WIDTH_CM * 0.5f) ;
-  const float driveLimit         = static_cast<float>(maxSpeed);
-
-  const float absY   = fabsf(robotPosCm.y);
-  const float absX   = fabsf(robotPosCm.x);
-  const float signY  = (robotPosCm.y >= 0.0f) ? 1.0f : -1.0f;
-
-  if (absY >= penaltyEntryY) {
-    const float zoneSpan      = fmaxf(fieldHalfY - penaltyEntryY, 1.0f);
-    const float depthFraction = constrain((absY - penaltyEntryY) / zoneSpan, 0.0f, 1.0f);
-    const float pushMin       = 0.35f * driveLimit;           // soft pull when just entering the area
-    const float pushStrength  = pushMin + depthFraction * (driveLimit - pushMin);
-
-    adjusted.y = -signY * pushStrength;
-
-    if (absX <= corridorHalfWidth) {
-      if (absY >= blendStartY && blendStartY < lockStartY) {
-        const float denom      = fmaxf(lockStartY - blendStartY, 1.0f);
-        const float lockFactor = constrain((absY - blendStartY) / denom, 0.0f, 1.0f);
-        adjusted.x *= (1.0f - lockFactor);
-      }
-      if (absY >= lockStartY) {
-        adjusted.x = 0.0f;
-      }
-    } else {
-      adjusted.x = constrain(adjusted.x, -0.4f * driveLimit, 0.4f * driveLimit);
-    }
-  }
-
-  if (absY >= lockStartY) {
-    const float overshoot = absY - lockStartY;
-    if (overshoot > 0.0f) {
-      const float required = constrain(overshoot * 12.0f, 0.0f, driveLimit);
-      const float current  = fabsf(adjusted.y);
-      adjusted.y = -signY * fmaxf(current, required);
-    }
-  }
-
-  adjusted.x = constrain(adjusted.x, -driveLimit, driveLimit);
-  adjusted.y = constrain(adjusted.y, -driveLimit, driveLimit);
-  return adjusted;
-}
-
-
 
 
 
@@ -207,7 +156,6 @@ void setup() {
   cobsSerial.setStream(&Serial);
   cobsSerial.setPacketHandler(&onPacketReceived);
   Wire1.begin();
-    gyro.begin();
     
   LidarBegin();
 
@@ -228,39 +176,56 @@ void loop() {
   lidaar();   // Funktion für LiDAR-Daten
   gyro.update();
   g_a = gyro.getAngleDegrees();
+  float bs = gyro.getAngleRadians(); // pdg bleibt wahrscheinlich float
+
 
   float pdg = pidg.updatePD(g_a); // pdg bleibt wahrscheinlich float
+
 
   p_x = Player.x;
   p_y = Player.y;
 
-  Serial.print('x');
-  Serial.println(p_x);
-    Serial.print('y');
-  Serial.println(p_y);
+
+
+
+
+
+
 
   Vec2 v = computeBehindBallTarget(last_vx, last_vy);
 
-
-
+  
   float finalbvx = pidx.update(v.x);
   float finalbvy = pidy.update(v.y);
+
+
+  Vec2 ball = { finalbvx, finalbvy };
+  Vec2 ballLocal = { last_vx, last_vy };
+
+  applyFieldBounds(ball, p_x, p_y, kBounds, ballLocal);
+
+
 
   uint32_t nowMs = millis();
   if (got_cmd && (nowMs - last_cmd_ms) > CMD_TIMEOUT_MS) {
     got_cmd = false;
   }
 
-  Vec2 ball = { finalbvx, finalbvy };
 
   if (!got_cmd) {
     ball.x = 0.0f;
     ball.y = 0.0f;
   }
 
-  ball = applyGoalBoundaryGuard(ball, Player);
 
-  Drive.calcDrive(-ball.x, -ball.y, -pdg);
+
+
+
+
+  Drive.calcDrive(ball.x, -ball.y, -pdg);
+
+  Serial.println(ballLocal.x);
 
   Drive.drive();
+
 }

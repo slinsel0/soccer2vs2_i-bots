@@ -105,9 +105,8 @@ void resetSimilarPoints() {
   }
 }
 void clusterForPos() {
-  resetSimilarPoints();          // Histogramme auf 0 setzen
+  resetSimilarPoints();          
 
-  // --- 1) Histogramme füllen (Schrittweite 10 mm = 1 cm) ---------------------
   for (int i = 0; i < 360; ++i) {
     int xBin = points360[i].x / 10;
     int yBin = points360[i].y / 10;
@@ -120,7 +119,7 @@ void clusterForPos() {
     }
   }
 
-  // --- 2) Äußerste belegte X- und Y-Bins suchen ------------------------------
+  // --- 2) Äußerste  X und Y suchen ------------------------------
   highestX = lowestX = highestY = lowestY = 0;
 
   for (int i = FIELD_X_CM; i >= 0; --i) {            // +X-Wand
@@ -136,8 +135,8 @@ void clusterForPos() {
     if (similarPointsY[i][1] > 1) { lowestY  = -i; break; }
   }
 
-  // --- 3) Roboter­mittelpunkt berechnen --------------------------------------
-  Player.x = (highestX + lowestX) * 0.5f;   // cm-Koordinaten
+  // --- 3) robopos rechenen --------------------------------------
+  Player.x = (highestX + lowestX) * 0.5f;   
   Player.y = (highestY + lowestY) * 0.5f;
 }
 void clusterPoints() {
@@ -288,7 +287,6 @@ void lidaar() {
     if (x == 0 && y == 0)
       continue;
 
-    // Rotationsblock (1:1 übernehmen)
     double xRotated = x * cosTheta - y * sinTheta;
     double yRotated = x * sinTheta + y * cosTheta;
     double xAdjusted = yRotated;

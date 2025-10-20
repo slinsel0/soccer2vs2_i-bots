@@ -30,16 +30,20 @@ struct Vec2 {
   float y;
 };
 
+#ifndef SAFETY_VEC2_DEFINED
+#define SAFETY_VEC2_DEFINED 1
+#endif
+
 struct Vec2E {
   float x;
   float y;
   float probability;
 };
 
-// Roboterposition (z. B. in cm oder mm – hier verwenden wir mm)
+// Roboterposition (mm)
 extern Vec2 Player;
 
-// LiDAR-Punkt-Struktur (alle Maße in mm)
+// LiDAR-Punkts (alle Maße in mm)
 struct LidarPoint {
   int distance;    // Entfernung (mm)
   int intensity;

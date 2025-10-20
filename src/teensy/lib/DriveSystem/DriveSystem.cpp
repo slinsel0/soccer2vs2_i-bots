@@ -5,98 +5,104 @@
 // clampSpeed: Beschränkt den übergebenen Speed auf den zulässigen Bereich (-MAX_PWM_OUTPUT  bis MAX_PWM_OUTPUT )
 
 
+namespace {
+  inline float clampf(float x, float lo, float hi){ return x < lo ? lo : (x > hi ? hi : x); }
+
+  inline float lmapf(float x, float in_min, float in_max, float out_min, float out_max) {
+    if (in_max == in_min) return out_min;
+    float t = (x - in_min) / (in_max - in_min);
+    return out_min + t * (out_max - out_min);
+  }
+}
+
 
 // setMotor: Steuert einen einzelnen Motor (Richtung und PWM) anhand des Speed-Werts
 void DriveSystem::setMotor(int pinA, int pinB, int pinPWM, int speed) {
-  
-  if (speed == 0) {
+  const int HOLD_PWM = 26;           // hält Treiber „wach“ (wie bei dir)
+  int pwm = abs(speed);
+
+  if (pwm == 0) {
+    // neutral / leichter Hold
     digitalWrite(pinA, HIGH);
     digitalWrite(pinB, LOW);
-    analogWrite(pinPWM, 26);
+    analogWrite(pinPWM, HOLD_PWM);
     return;
   }
-  
-  // Vorwärtsbetrieb
-  if (speed >= minSpeed) {
+
+  // Mindest-PWM gegen Haftreibung
+  if (pwm < minSpeed) pwm = minSpeed;
+
+  if (speed > 0) {
     digitalWrite(pinA, LOW);
     digitalWrite(pinB, HIGH);
-    analogWrite(pinPWM, speed);
-  }
-  // Rückwärtsbetrieb
-  else if (speed <= -minSpeed) {
+    analogWrite(pinPWM, pwm);
+  } else {
     digitalWrite(pinA, HIGH);
     digitalWrite(pinB, LOW);
-    analogWrite(pinPWM, abs(speed));
-  }
-  else {
-    digitalWrite(pinA, HIGH);
-    digitalWrite(pinB, LOW);
-    analogWrite(pinPWM, 26);
+    analogWrite(pinPWM, pwm);
   }
 }
+
 
 // ------------------------ Konstruktor ------------------------
 
 DriveSystem::DriveSystem() {
   motorVR = motorHR = motorHL = motorVL = 0;
- 
+
+  // Matrix: gleiche Projektion wie bei dir (cos/sin), plus Rotations-Spalte
+  M[0][0] = cos(motorVRversatz); M[0][1] = sin(motorVRversatz); M[0][2] = rot_to_lin;
+  M[1][0] = cos(motorHRversatz); M[1][1] = sin(motorHRversatz); M[1][2] = rot_to_lin;
+  M[2][0] = cos(motorHLversatz); M[2][1] = sin(motorHLversatz); M[2][2] = rot_to_lin;
+  M[3][0] = cos(motorVLversatz); M[3][1] = sin(motorVLversatz); M[3][2] = rot_to_lin;
 }
+
 
 // ------------------------ calcDrive ------------------------
 
 
-// In deiner DriveSystem.cpp Datei
-void DriveSystem::calcDrive(float vX, float vY, float r) {
-    const int MAX_PWM_OUTPUT = 180;
+void DriveSystem::calcDrive(float vX, float vY, float r_cmd) {
+  // 1) getrennt rechnen
+  float wT[4], wR[4];
+  const float c[4] = { cos(motorVRversatz), cos(motorHRversatz), cos(motorHLversatz), cos(motorVLversatz) };
+  const float s[4] = { sin(motorVRversatz), sin(motorHRversatz), sin(motorHLversatz), sin(motorVLversatz) };
 
+  for (int i=0;i<4;++i) {
+    wT[i] = c[i]*vX + s[i]*vY;          // Translation pro Rad
+    wR[i] = rot_to_lin * r_cmd;         // Rotation pro Rad (gleich für alle)
+  }
 
-    // === SCHRITT 1: Berechne die benötigten Geschwindigkeits-Komponenten ===
-    float transVR_comp = (vX * cos(motorVRversatz)) + (vY * sin(motorVRversatz));
-    float transHR_comp = (vX * cos(motorHRversatz)) + (vY * sin(motorHRversatz));
-    float transHL_comp = (vX * cos(motorHLversatz)) + (vY * sin(motorHLversatz));
-    float transVL_comp = (vX * cos(motorVLversatz)) + (vY * sin(motorVLversatz));
-    // Die Rotations-Komponente ist für alle Motoren gleich: r
+  // 2) Rotation priorisieren
+  float maxR = 0.f; for (int i=0;i<4;++i) maxR = fmaxf(maxR, fabsf(wR[i]));
+  float s_rot = (maxR > maxSpeed && maxSpeed>0) ? (maxSpeed / maxR) : 1.f;
+  for (int i=0;i<4;++i) wR[i] *= s_rot;
 
-    // === SCHRITT 2: Finde die maximale Anforderung und skaliere bei Bedarf ===
-    // Wir finden den Motor, der am meisten "gestresst" wird, indem wir die Absolutbeträge
-    // der Anforderungen für Translation und Rotation addieren.
-    float max_demand = 0;
-    max_demand = max(max_demand, abs(transVR_comp) + abs(r));
-    max_demand = max(max_demand, abs(transHR_comp) + abs(r));
-    max_demand = max(max_demand, abs(transHL_comp) + abs(r));
-    max_demand = max(max_demand, abs(transVL_comp) + abs(r));
-
-    // Wenn die maximale Anforderung unser Geschwindigkeitslimit (z.B. 200) übersteigt,
-    // müssen wir alle Eingangs-Befehle proportional verkleinern.
-    if (max_demand > maxSpeed) {
-        float scale = (float)maxSpeed / max_demand;
-        vX *= scale;
-        vY *= scale;
-        r *= scale;
-        // Berechne die Translations-Komponenten neu mit den skalierten Werten
-        transVR_comp = (vX * cos(motorVRversatz)) + (vY * sin(motorVRversatz));
-        transHR_comp = (vX * cos(motorHRversatz)) + (vY * sin(motorHRversatz));
-        transHL_comp = (vX * cos(motorHLversatz)) + (vY * sin(motorHLversatz));
-        transVL_comp = (vX * cos(motorVLversatz)) + (vY * sin(motorVLversatz));
+  // 3) Rest-Headroom für Translation berechnen
+  float s_trans = 1.f;
+  for (int i=0;i<4;++i) {
+    float hi = maxSpeed - fabsf(wR[i]);
+    if (fabsf(wT[i]) > 1e-6f) {
+      s_trans = fminf(s_trans, clampf(hi / fabsf(wT[i]), 0.f, 1.f));
     }
+  }
 
+  // 4) mischen + Deadband + PWM-Mapping (deine float-Map)
+  auto toPWM = [&](float v)->int {
+    if (fabsf(v) < deadband) return 0;
+    float mag = lmapf(fabsf(v), 0.f, maxSpeed, (float)minSpeed, (float)MAX_PWM_OUTPUT);
+    int pwm = (int)lrintf(clampf(mag, (float)minSpeed, (float)MAX_PWM_OUTPUT));
+    return v>=0 ? pwm : -pwm;
+  };
 
-    float final_speed_vr = transVR_comp + r;
-    float final_speed_hr = transHR_comp + r;
-    float final_speed_hl = transHL_comp + r;
-    float final_speed_vl = transVL_comp + r;
+  float w[4];
+  for (int i=0;i<4;++i) w[i] = wR[i] + s_trans*wT[i];
 
-    const float deadband = 2.0f;
-    motorVR = (abs(final_speed_vr) < deadband) ? 0 : (final_speed_vr > 0 ? map(final_speed_vr, 0, maxSpeed, minSpeed, MAX_PWM_OUTPUT ) : map(final_speed_vr, -maxSpeed, 0, -MAX_PWM_OUTPUT , -minSpeed));
-    motorHR = (abs(final_speed_hr) < deadband) ? 0 : (final_speed_hr > 0 ? map(final_speed_hr, 0, maxSpeed, minSpeed, MAX_PWM_OUTPUT ) : map(final_speed_hr, -maxSpeed, 0, -MAX_PWM_OUTPUT , -minSpeed));
-    motorHL = (abs(final_speed_hl) < deadband) ? 0 : (final_speed_hl > 0 ? map(final_speed_hl, 0, maxSpeed, minSpeed, MAX_PWM_OUTPUT ) : map(final_speed_hl, -maxSpeed, 0, -MAX_PWM_OUTPUT , -minSpeed));
-    motorVL = (abs(final_speed_vl) < deadband) ? 0 : (final_speed_vl > 0 ? map(final_speed_vl, 0, maxSpeed, minSpeed, MAX_PWM_OUTPUT ) : map(final_speed_vl, -maxSpeed, 0, -MAX_PWM_OUTPUT , -minSpeed));
-
-    //     Serial.print("motorVR: "); Serial.print(motorVR);
-    // Serial.print("\tmotorHR: "); Serial.print(motorHR);
-    // Serial.print("\tmotorHL: "); Serial.print(motorHL);
-    // Serial.print("\tmotorVL: "); Serial.println(motorVL);
+  motorVR = toPWM(w[0]);
+  motorHR = toPWM(w[1]);
+  motorHL = toPWM(w[2]);
+  motorVL = toPWM(w[3]);
 }
+
+
 // ------------------------ calcDriveRotation ------------------------
 //
 // Diese Funktion rotiert den Eingangsvektor (x,y) um den Winkel theta
@@ -111,9 +117,23 @@ void DriveSystem::calcDriveRotation(float x, float y, float r, float theta) {
 // ------------------------ drive ------------------------
 //
 // Sendet die berechneten Motorwerte an die Hardware.
+static inline int applySlew(int target, int prev, int step) {
+  if (target > prev + step) return prev + step;
+  if (target < prev - step) return prev - step;
+  return target;
+}
+
 void DriveSystem::drive() {
-  setMotor(motorVRpin[0], motorVRpin[1], motorVRpin[2], motorVR);
-  setMotor(motorHRpin[0], motorHRpin[1], motorHRpin[2], motorHR);
-  setMotor(motorHLpin[0], motorHLpin[1], motorHLpin[2], motorHL);
-  setMotor(motorVLpin[0], motorVLpin[1], motorVLpin[2], motorVL);
+  // sanft machen
+  int outVR = applySlew(motorVR, prevVR, slewPerCycle);
+  int outHR = applySlew(motorHR, prevHR, slewPerCycle);
+  int outHL = applySlew(motorHL, prevHL, slewPerCycle);
+  int outVL = applySlew(motorVL, prevVL, slewPerCycle);
+
+  setMotor(motorVRpin[0], motorVRpin[1], motorVRpin[2], outVR);
+  setMotor(motorHRpin[0], motorHRpin[1], motorHRpin[2], outHR);
+  setMotor(motorHLpin[0], motorHLpin[1], motorHLpin[2], outHL);
+  setMotor(motorVLpin[0], motorVLpin[1], motorVLpin[2], outVL);
+
+  prevVR = outVR; prevHR = outHR; prevHL = outHL; prevVL = outVL;
 }

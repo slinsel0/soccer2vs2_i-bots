@@ -21,7 +21,7 @@ import numpy as np
 # --- Serielle Schnittstelle (COBS+CRC32, wie pi_tx.py) ---
 SER_PORT = "/dev/ttyACM0"     # ggf. ACM1
 SER_BAUD = 2_000_000          # USB-CDC, unkritisch aber ok
-SER_RATE_HZ = 200             # Sende-Frequenz
+SER_RATE_HZ = 400             # Sende-Frequenz
 
 # --- Kalibrierung (pro Kamera separate Datei empfohlen) ---
 CALIB_CAM0 = "ioi.npz"   # K, D, image_size
@@ -29,7 +29,7 @@ CALIB_CAM1 = "oioio.npz"   # K, D, image_size
 FISHEYE_BALANCE = 0.80                      # 0..1
 
 # --- Kamera-Steuerung ---
-EXPOSURE_TIME_US = 50000
+EXPOSURE_TIME_US = 30000
 FPS = 30
 
 # --- BallTracker-Konfig (extern aus JSON) ---
@@ -272,7 +272,7 @@ class BallTracker:
                                     cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
             x_cv, y_cv = kp.pt
             cx, cy = (W * 0.5), (H * 0.5)
-            x_rel = x_cv - cx
+            x_rel = x_cv - cx 
             y_rel = cy - y_cv
             coords = (x_rel, y_rel)
             self.last_detection_time[cam_id] = time.time()

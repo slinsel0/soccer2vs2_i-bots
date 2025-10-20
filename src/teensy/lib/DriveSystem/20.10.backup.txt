@@ -1,0 +1,217 @@
+
+#include "DriveSystem.h"
+
+// ------------------------ Hilfsfunktionen ------------------------
+
+// clampSpeed: Beschränkt den übergebenen Speed auf den zulässigen Bereich (-MAX_PWM_OUTPUT  bis MAX_PWM_OUTPUT )
+
+
+
+// setMotor: Steuert einen einzelnen Motor (Richtung und PWM) anhand des Speed-Werts
+void DriveSystem::setMotor(int pinA, int pinB, int pinPWM, int speed) {
+  
+  if (speed == 0) {
+    digitalWrite(pinA, HIGH);
+    digitalWrite(pinB, LOW);
+    analogWrite(pinPWM, 26);
+    return;
+  }
+  
+  // Vorwärtsbetrieb
+  if (speed >= minSpeed) {
+    digitalWrite(pinA, LOW);
+    digitalWrite(pinB, HIGH);
+    analogWrite(pinPWM, speed);
+  }
+  // Rückwärtsbetrieb
+  else if (speed <= -minSpeed) {
+    digitalWrite(pinA, HIGH);
+    digitalWrite(pinB, LOW);
+    analogWrite(pinPWM, abs(speed));
+  }
+  else {
+    digitalWrite(pinA, HIGH);
+    digitalWrite(pinB, LOW);
+    analogWrite(pinPWM, 26);
+  }
+}
+
+// ------------------------ Konstruktor ------------------------
+
+DriveSystem::DriveSystem() {
+  motorVR = motorHR = motorHL = motorVL = 0;
+ 
+}
+
+// ------------------------ calcDrive ------------------------
+
+
+// In deiner DriveSystem.cpp Datei
+void DriveSystem::calcDrive(float vX, float vY, float r) {
+    const int MAX_PWM_OUTPUT = 200;
+
+
+    // === SCHRITT 1: Berechne die benötigten Geschwindigkeits-Komponenten ===
+    float transVR_comp = (vX * cos(motorVRversatz)) + (vY * sin(motorVRversatz));
+    float transHR_comp = (vX * cos(motorHRversatz)) + (vY * sin(motorHRversatz));
+    float transHL_comp = (vX * cos(motorHLversatz)) + (vY * sin(motorHLversatz));
+    float transVL_comp = (vX * cos(motorVLversatz)) + (vY * sin(motorVLversatz));
+    // Die Rotations-Komponente ist für alle Motoren gleich: r
+
+    // === SCHRITT 2: Finde die maximale Anforderung und skaliere bei Bedarf ===
+    // Wir finden den Motor, der am meisten "gestresst" wird, indem wir die Absolutbeträge
+    // der Anforderungen für Translation und Rotation addieren.
+    float max_demand = 0;
+    max_demand = max(max_demand, abs(transVR_comp) + abs(r));
+    max_demand = max(max_demand, abs(transHR_comp) + abs(r));
+    max_demand = max(max_demand, abs(transHL_comp) + abs(r));
+    max_demand = max(max_demand, abs(transVL_comp) + abs(r));
+
+    // Wenn die maximale Anforderung unser Geschwindigkeitslimit (z.B. 200) übersteigt,
+    // müssen wir alle Eingangs-Befehle proportional verkleinern.
+    if (max_demand > maxSpeed) {
+        float scale = (float)maxSpeed / max_demand;
+        vX *= scale;
+        vY *= scale;
+        r *= scale;
+        // Berechne die Translations-Komponenten neu mit den skalierten Werten
+        transVR_comp = (vX * cos(motorVRversatz)) + (vY * sin(motorVRversatz));
+        transHR_comp = (vX * cos(motorHRversatz)) + (vY * sin(motorHRversatz));
+        transHL_comp = (vX * cos(motorHLversatz)) + (vY * sin(motorHLversatz));
+        transVL_comp = (vX * cos(motorVLversatz)) + (vY * sin(motorVLversatz));
+    }
+
+
+    float final_speed_vr = transVR_comp + r;
+    float final_speed_hr = transHR_comp + r;
+    float final_speed_hl = transHL_comp + r;
+    float final_speed_vl = transVL_comp + r;
+
+    const float deadband = 3.0f;
+    motorVR = (abs(final_speed_vr) < deadband) ? 0 : (final_speed_vr > 0 ? map(final_speed_vr, 0, maxSpeed, minSpeed, MAX_PWM_OUTPUT ) : map(final_speed_vr, -maxSpeed, 0, -MAX_PWM_OUTPUT , -minSpeed));
+    motorHR = (abs(final_speed_hr) < deadband) ? 0 : (final_speed_hr > 0 ? map(final_speed_hr, 0, maxSpeed, minSpeed, MAX_PWM_OUTPUT ) : map(final_speed_hr, -maxSpeed, 0, -MAX_PWM_OUTPUT , -minSpeed));
+    motorHL = (abs(final_speed_hl) < deadband) ? 0 : (final_speed_hl > 0 ? map(final_speed_hl, 0, maxSpeed, minSpeed, MAX_PWM_OUTPUT ) : map(final_speed_hl, -maxSpeed, 0, -MAX_PWM_OUTPUT , -minSpeed));
+    motorVL = (abs(final_speed_vl) < deadband) ? 0 : (final_speed_vl > 0 ? map(final_speed_vl, 0, maxSpeed, minSpeed, MAX_PWM_OUTPUT ) : map(final_speed_vl, -maxSpeed, 0, -MAX_PWM_OUTPUT , -minSpeed));
+
+    //     Serial.print("motorVR: "); Serial.print(motorVR);
+    // Serial.print("\tmotorHR: "); Serial.print(motorHR);
+    // Serial.print("\tmotorHL: "); Serial.print(motorHL);
+    // Serial.print("\tmotorVL: "); Serial.println(motorVL);
+}
+// ------------------------ calcDriveRotation ------------------------
+//
+// Diese Funktion rotiert den Eingangsvektor (x,y) um den Winkel theta
+// und ruft anschließend calcDrive mit den rotierten Werten auf.
+void DriveSystem::calcDriveRotation(float x, float y, float r, float theta) {
+  float rotatedX = x * cos(theta) - y * sin(theta);
+  float rotatedY = x * sin(theta) + y * cos(theta);
+  calcDrive(rotatedX, rotatedY, r);
+}
+
+
+// ------------------------ drive ------------------------
+//
+// Sendet die berechneten Motorwerte an die Hardware.
+void DriveSystem::drive() {
+  setMotor(motorVRpin[0], motorVRpin[1], motorVRpin[2], motorVR);
+  setMotor(motorHRpin[0], motorHRpin[1], motorHRpin[2], motorHR);
+  setMotor(motorHLpin[0], motorHLpin[1], motorHLpin[2], motorHL);
+  setMotor(motorVLpin[0], motorVLpin[1], motorVLpin[2], motorVL);
+}
+
+
+
+
+
+
+
+#ifndef DRIVE_SYSTEM_H
+#define DRIVE_SYSTEM_H
+
+#include <Arduino.h>
+#include <math.h>
+
+// ------------------- MotorPins -------------------
+static const uint8_t motorHRpin[] = {3, 4, 15};   // HR: CCW1, CW1, PWM
+static const uint8_t motorVRpin[] = {5, 6, 19};   // VR: CCW1, CW1, PWM
+static const uint8_t motorVLpin[] = {10, 7, 14};  // VL: CCW1, CW1, PWM
+static const uint8_t motorHLpin[] = {12, 11, 18}; // HL: CCW1, CW1, PWM
+
+// ------------------ MotorVersatz (Winkel in Radiant) -----------------
+#define motorVRversatz (PI * 50.0f  / 180.0f)
+#define motorHRversatz (PI * 130.0f / 180.0f)
+#define motorHLversatz (PI * 230.0f / 180.0f)
+#define motorVLversatz (PI * 310.0f / 180.0f)
+
+// ----------------- MinMaxMotor -------------------
+#define maxSpeed     110  // maximaler Geschwindigkeitswert
+#define minSpeed     27    // minimaler Speed
+#define maxRotation  70    // maximale Rotationsgeschwindigkeit
+
+
+
+
+// ----------------- Radpositionen -----------------
+// Angenommene Werte (in cm oder passenden Einheiten):
+static const float motorPosX[4] = {
+    5.95f,    // VR (50°)
+    5.95f,    // HR (130°)
+    -5.95f,   // HL (230°)
+    -5.95f    // VL (310°)
+};
+
+static const float motorPosY[4] = {
+    4.9915f,  // VR
+    -4.9915f, // HR
+    -4.9915f, // HL
+    4.9915f   // VL
+};
+
+static const float motorAngle[4] = {
+    motorVRversatz,
+    motorHRversatz,
+    motorHLversatz,
+    motorVLversatz
+};
+
+// ----------------- Filter-/Rampenparameter -------------------
+#define RATE_LIMIT 20.0f         // Maximale Änderung pro Sekunde (Einheiten/Sekunde)
+#define LP_ALPHA   0.65f      // Low-Pass-Filter-Koeffizient (0.0 bis 1.0, kleiner = stärkeres Glätten)
+#define DEAD_BAND  1         // Deadband, unterhalb dessen Werte als 0 gelten
+
+class DriveSystem {
+public:
+    DriveSystem();
+
+    // Berechnet die Motorsollwerte basierend auf Translation (x,y) und Rotation (r)
+    void calcDrive(float vX, float vY, float r);
+    
+    // Führt eine zusätzliche Rotation der Eingangsvektoren durch (Matrix-Rotation)
+    void calcDriveRotation(float x, float y, float r, float theta);
+    
+    // Setzt die berechneten Werte an die Motoren
+    void drive();
+    
+    // Rampenratenbegrenzung: begrenzt den Übergang von current zu target um maximal rampRate
+
+    void setMotor(int pinA, int pinB, int pinPWM, int speed);
+
+
+private:
+    // Setzt einen einzelnen Motor (Richtung und PWM) basierend auf dem übergebenen Speed
+    
+    // Begrenze den Speed auf den zulässigen PWM-Bereich (-255 bis +255)
+
+private:
+    int motorVR;
+    int motorHR;
+    int motorHL;
+    int motorVL;
+    
+    // Zusätzliche Membervariablen für zeitbasierte Integration und Filterung:
+    unsigned long lastUpdateTime; // Letzter Update-Zeitpunkt (Millis)
+    float prevSpeed[4];    // Vorherige Sollwerte für die 4 Motoren
+    float currentSpeed[4]; // Aktuell gefilterte Sollwerte für die 4 Motoren
+};
+
+#endif

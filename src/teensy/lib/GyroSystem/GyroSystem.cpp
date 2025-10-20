@@ -1,4 +1,5 @@
 #include "GyroSystem.h"
+#include "Arduino.h"
 
 GyroSystem::GyroSystem() 
   : bno(55),      // Konstruktor-Parameter für den BNO (ID)
@@ -10,7 +11,7 @@ GyroSystem::GyroSystem()
 void GyroSystem::begin()
 {
     // BNO055 starten
-    if (!bno.begin())
+    if (!bno.begin(OPERATION_MODE_IMUPLUS))
     {
         Serial.println("Could not find a BNO055 sensor!");
         // Endlosschleife, falls Sensor nicht gefunden
@@ -24,12 +25,7 @@ void GyroSystem::begin()
     // Optional: Additional config, offsets, calibration
     bno.setExtCrystalUse(true);
 
-    bno.setMode(OPERATION_MODE_CONFIG);
-      delay(25);
-    
-    bno.setMode(OPERATION_MODE_IMUPLUS);
-
-          delay(25);
+  
 
 
 
