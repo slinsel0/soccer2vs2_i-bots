@@ -90,10 +90,10 @@ private:
   float rot_to_lin = 0.18f;   // [m] Roboter-"Radius" zur Drehachse
 
   // Deadband in "v"-Einheiten
-  float deadband = 4.0f;
+  float deadband = 2.0f;
 
   // max. PWM-Schritt pro drive()-Aufruf
-  int   slewPerCycle = 13;
+  int   slewPerCycle = 20;
 
   // Mindest-PWM (um Haftreibung sicher zu überwinden)
   int   minSpeed = 26;

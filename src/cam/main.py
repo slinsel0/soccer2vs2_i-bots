@@ -23,14 +23,14 @@ SER_PORT = "/dev/ttyACM0"     # ggf. ACM1
 SER_BAUD = 2_000_000          # USB-CDC, unkritisch aber ok
 SER_RATE_HZ = 400             # Sende-Frequenz
 
-# --- Kalibrierung (pro Kamera separate Datei empfohlen) ---
+# --- Kalibrierung (pro Kamera separates Datei empfohlen) ---
 CALIB_CAM0 = "ioi.npz"   # K, D, image_size
 CALIB_CAM1 = "oioio.npz"   # K, D, image_size
 FISHEYE_BALANCE = 0.80                      # 0..1
 
 # --- Kamera-Steuerung ---
-EXPOSURE_TIME_US = 30000
-FPS = 30
+EXPOSURE_TIME_US = 15000
+FPS = 60
 
 # --- BallTracker-Konfig (extern aus JSON) ---
 CONFIG_PATH = 'ball_tracker_config.json'
@@ -392,9 +392,13 @@ def dual_camera_processor(queue_cam0: queue.Queue,
 
     tracker = BallTracker()
 
-    # Framegröße (für optionale Normierung im Sender)
-    # wird dynamisch beim ersten Bild gesetzt
     first_w_h_set = False
+
+    # --- FPS-Variablen ---
+    last_time_cam0 = time.time()
+    last_time_cam1 = time.time()
+    fps_cam0 = 0.0
+    fps_cam1 = 0.0
 
     while not stop_event.is_set():
         f0 = f1 = None
@@ -413,7 +417,26 @@ def dual_camera_processor(queue_cam0: queue.Queue,
             if not first_w_h_set:
                 shared.set_frame_size(f0.shape[1], f0.shape[0])
                 first_w_h_set = True
+
+            # FPS für Cam0 berechnen
+            now = time.time()
+            dt = now - last_time_cam0
+            if dt > 0:
+                fps_cam0 = 1.0 / dt
+            last_time_cam0 = now
+
             vis0, m0, c0, s0 = tracker.detect_ball(f0, 0)
+
+            # --- FPS ins Bild schreiben ---
+            cv2.putText(vis0,
+                        f"FPS: {fps_cam0:5.1f}",
+                        (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1.0,
+                        (0, 255, 0),
+                        2,
+                        cv2.LINE_AA)
+
             cv2.imshow('Cam0', vis0)
             cv2.imshow('Mask0', m0)
             if c0 is not None:
@@ -423,7 +446,26 @@ def dual_camera_processor(queue_cam0: queue.Queue,
             if not first_w_h_set:
                 shared.set_frame_size(f1.shape[1], f1.shape[0])
                 first_w_h_set = True
+
+            # FPS für Cam1 berechnen
+            now = time.time()
+            dt = now - last_time_cam1
+            if dt > 0:
+                fps_cam1 = 1.0 / dt
+            last_time_cam1 = now
+
             vis1, m1, c1, s1 = tracker.detect_ball(f1, 1)
+
+            # --- FPS ins Bild schreiben ---
+            cv2.putText(vis1,
+                        f"FPS: {fps_cam1:5.1f}",
+                        (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1.0,
+                        (0, 255, 0),
+                        2,
+                        cv2.LINE_AA)
+
             cv2.imshow('Cam1', vis1)
             cv2.imshow('Mask1', m1)
             if c1 is not None and (best is None or s1 > best[0]):
@@ -440,6 +482,7 @@ def dual_camera_processor(queue_cam0: queue.Queue,
             stop_event.set()
             print("[Proc] Stop-Signal – beende …")
             break
+
 
 # ============================================================
 # -----------  HAUPTKLASSE ----------------------------------

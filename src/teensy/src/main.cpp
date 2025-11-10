@@ -18,9 +18,11 @@ GyroSystem gyro;
 
 DriveSystem Drive;
 
-PIDController pidg(5.25f,  0.00001f,   2.50f, 1.5f,  0.0f);
-PIDController pidx(2.60, 0.0f, 10.0f, 1.5f, 0.0f);
-PIDController pidy(2.6, 0.0, 10.0f, 1.5f, 0.0f);
+PIDController pidg(8.0f,  0.001f,   1.5f, 0.0f,  25.0f);
+PIDController pidb(4.0f,  0.000f,   0.0f, 0.0f,  25.0f);
+
+PIDController pidx(2.60, 0.001f, 2.0f, 0.0f, 20.0f);
+PIDController pidy(2.6, 0.001f, 2.0f, 0.0f, 20.0f);
 
 static const BoundsConfig kBounds = {
   /* xLimit     */ 80.0f,    // halbe kurze Seite
@@ -44,6 +46,8 @@ float p_y= 0;
 float pdg = 0.0f;
 float fp_x =0.0f;
 float fp_y =0.0f;
+float ballAngleGlobalDeg = 0.0f;
+
 
 
 
@@ -126,10 +130,10 @@ static Vec2 computeBehindBallTarget(float ballX, float ballY) {
     }
   } else {
     if (ballX < 0.0f) {
-      offset.x = -35.0f;
+      offset.x = -50.0f;
       offset.y = 75.0f;
     } else {
-      offset.x = 35.0f;
+      offset.x = 50.0f;
       offset.y = 75.0f;
     }
   }
@@ -176,10 +180,10 @@ void loop() {
   lidaar();   // Funktion für LiDAR-Daten
   gyro.update();
   g_a = gyro.getAngleDegrees();
-  float bs = gyro.getAngleRadians(); // pdg bleibt wahrscheinlich float
+  // float bs = gyro.getAngleRadians(); // pdg bleibt wahrscheinlich float
 
 
-  float pdg = pidg.updatePD(g_a); // pdg bleibt wahrscheinlich float
+  float pdg = pidg.update(g_a); // pdg bleibt wahrscheinlich float
 
 
   p_x = Player.x;
@@ -191,8 +195,11 @@ void loop() {
 
 
 
+  Vec2 ballLocal = { last_vx, last_vy };
 
-  Vec2 v = computeBehindBallTarget(last_vx, last_vy);
+  ballLocal.x += 25;
+  Vec2 v = computeBehindBallTarget(ballLocal.x, ballLocal.y);
+
 
   
   float finalbvx = pidx.update(v.x);
@@ -200,7 +207,6 @@ void loop() {
 
 
   Vec2 ball = { finalbvx, finalbvy };
-  Vec2 ballLocal = { last_vx, last_vy };
 
   applyFieldBounds(ball, p_x, p_y, kBounds, ballLocal);
 
@@ -212,19 +218,31 @@ void loop() {
   }
 
 
-  if (!got_cmd) {
-    ball.x = 0.0f;
-    ball.y = 0.0f;
+  if (!got_cmd ) {
+       ballLocal.x -= 25;
+
+    ball.x = -p_x*2;
+    ball.y = -p_y*2;
   }
 
 
+  // ballAngleGlobalDeg = computeBallAngleErrorDeg(ballLocal);
+
+  // 2. PID drüberjagen → gibt dir die Drehgeschwindigkeit
+  // float turnCmd = pidb.update(ballAngleGlobalDeg);
+
+  // Serial.print("ballLocal.x ");
+
+  // Serial.println(ballLocal.x );
+
+  //  Serial.print("ballLocal.y ");
+
+  // Serial.println(ballLocal.y );
 
 
 
+   Drive.calcDrive(ball.x, -ball.y, -pdg);
 
-  Drive.calcDrive(ball.x, -ball.y, -pdg);
-
-  Serial.println(ballLocal.x);
 
   Drive.drive();
 

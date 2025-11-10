@@ -1,10 +1,10 @@
 {
     "h_lower": 0,
     "s_lower": 235,
-    "v_lower": 153,
-    "h_upper": 13,
+    "v_lower": 65,
+    "h_upper": 10,
     "s_upper": 255,
-    "v_upper": 242,
+    "v_upper": 129,
     "kernel_size": 3,
     "erode_iter": 2,
     "dilate_iter": 3,
