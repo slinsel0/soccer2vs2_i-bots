@@ -2,319 +2,228 @@
 #include "math.h"
 #include <vector>
 #include "GyroSystem.h"
-#include "LD19.h"  // Damit kennen wir POINTCLOUD_SIZE (sofern du es als Makro definierst) und die Klasse LD19
-
-
-
-
+#include "LD19.h"
 
 // --- Globale Variablen ---
-
-Vec2 Player;  // Roboterposition
+Vec2 Player = {0, 0}; 
 
 LidarPoint points360[360];
 
-// Für Clustering (Anzahl der LiDAR-Punkte in einem bestimmten Bereich in cm)
-int similarPointsX[FIELD_X_CM + 1][2];  // [0] für positive, [1] für negative Werte
-int similarPointsY[FIELD_Y_CM + 1][2];
+// Histogramm-Arrays
+int similarPointsX[FIELD_X_CM + 5][2]; 
+int similarPointsY[FIELD_Y_CM + 5][2];
 
-int mostCommonX = 0;
-int mostCommonXValue = 0;
-int mostCommonY = 0;
-int mostCommonYValue = 0;
-
-int highestX = 0;
-int lowestX = 0;
-int highestY = 0;
-int lowestY = 0;
-
-int wallPuffer = 10;    // Puffer (in mm) für Wandnähe
-int noClusterPoints = 0;
-int selfSize = 180;     // Eigengröße des Roboters (mm)
-
-
-// Vektoren für erkannte Objekte/Gegner
-std::vector<Vec2> objects;
-std::vector<Vec2E> Enemys;
-std::vector<Vec2> EnemysFiltered;
-
-
-
-// --- LiDAR-Sensor ---
-// Erzeuge eine globale Instanz deines LD19-Sensors
- LD19 lidarsensor;
+// Instanzen
+LD19 lidarsensor;
 extern GyroSystem gyro;
 
-// --- Funktionen ---
+// --- Kalman Filter (Position in CM) ---
+// Werte skaliert auf CM: 
+// Messrauschen: 15.0 cm (statt 150 mm) - LiDAR trauen wir auf ca. 15cm genau
+// Schätzfehler Init: 10.0 cm
+// Prozessrauschen: 1.0 cm (statt 10 mm) - Dynamik des Roboters
+SimpleKalman kalmanX(15.0f, 10.0f, 1.0f); 
+SimpleKalman kalmanY(15.0f, 10.0f, 1.0f);
+unsigned long lastKalmanTime = 0;
 
-Vec2 Vec2EToVec2(const Vec2E &vec) {
-  Vec2 result;
-  result.x = vec.x;
-  result.y = vec.y;
-  return result;
+// --- Implementierung SimpleKalman ---
+SimpleKalman::SimpleKalman(float mea_e, float est_e, float q) 
+    : _err_measure(mea_e), _err_estimate(est_e), _q(q), _current_estimate(0), _last_estimate(0) {}
+
+float SimpleKalman::update(float mea, float dt) {
+    _err_estimate = _err_estimate + _q * dt; 
+    _kalman_gain = _err_estimate / (_err_estimate + _err_measure);
+    _current_estimate = _last_estimate + _kalman_gain * (mea - _last_estimate);
+    _err_estimate = (1.0f - _kalman_gain) * _err_estimate;
+    _last_estimate = _current_estimate;
+    return _current_estimate;
 }
 
-bool IsPointInCircle(Vec2 point, Vec2 center, float radius) {
-  float dx = point.x - center.x;
-  float dy = point.y - center.y;
-  return (dx * dx + dy * dy) <= (radius * radius);
-}
-
-void resetPoint(int i) {
-  points360[i].distance  = 0;
-  points360[i].intensity = 0;
-  points360[i].age       = 0;
-  points360[i].x         = 0;
-  points360[i].y         = 0;
-  points360[i].status    = 0;
-}
-
-void countCycle() {
-  for (int i = 0; i < 360; i++) {
-    points360[i].age++;
-  }
-}
-
-void filterPoints() {
-  for (int i = 0; i < 360; i++) {
-    // Beispielhafter Alterstest (legalage = 10)
-    if (points360[i].age > 10) {
-      resetPoint(i);
-      continue;
-    }
-    if (abs(points360[i].x) > FIELD_X_MM || abs(points360[i].y) > FIELD_Y_MM) {
-      points360[i].status = 999;
-    }
-    if ((points360[i].intensity < 100 && points360[i].intensity != 0) ||
-        points360[i].distance > sqrt(FIELD_X_MM * FIELD_X_MM + FIELD_Y_MM * FIELD_Y_MM)) {
-      points360[i].status = 999;
-    }
-  }
-}
-
+// --- Hilfsfunktionen ---
 void resetSimilarPoints() {
-  int xSize = FIELD_X_CM + 1;
-  int ySize = FIELD_Y_CM + 1;
-  for (int i = 0; i < xSize; i++) {
-    similarPointsX[i][0] = 0;
-    similarPointsX[i][1] = 0;
-  }
-  for (int i = 0; i < ySize; i++) {
-    similarPointsY[i][0] = 0;
-    similarPointsY[i][1] = 0;
-  }
+    memset(similarPointsX, 0, sizeof(similarPointsX));
+    memset(similarPointsY, 0, sizeof(similarPointsY));
 }
-void clusterForPos() {
-  resetSimilarPoints();          
 
-  for (int i = 0; i < 360; ++i) {
-    int xBin = points360[i].x / 10;
-    int yBin = points360[i].y / 10;
-
-    if (abs(xBin) <= FIELD_X_CM) {
-      (xBin >= 0 ? similarPointsX[xBin][0] : similarPointsX[-xBin][1])++;
-    }
-    if (abs(yBin) <= FIELD_Y_CM) {
-      (yBin >= 0 ? similarPointsY[yBin][0] : similarPointsY[-yBin][1])++;
-    }
-  }
-
-  // --- 2) Äußerste  X und Y suchen ------------------------------
-  highestX = lowestX = highestY = lowestY = 0;
-
-  for (int i = FIELD_X_CM; i >= 0; --i) {            // +X-Wand
-    if (similarPointsX[i][0] > 1) { highestX =  i; break; }
-  }
-  for (int i = FIELD_X_CM; i >= 0; --i) {            // –X-Wand
-    if (similarPointsX[i][1] > 1) { lowestX  = -i; break; }
-  }
-  for (int i = FIELD_Y_CM; i >= 0; --i) {            // +Y-Wand
-    if (similarPointsY[i][0] > 1) { highestY =  i; break; }
-  }
-  for (int i = FIELD_Y_CM; i >= 0; --i) {            // –Y-Wand
-    if (similarPointsY[i][1] > 1) { lowestY  = -i; break; }
-  }
-
-  // --- 3) robopos rechenen --------------------------------------
-  Player.x = (highestX + lowestX) * 0.5f;   
-  Player.y = (highestY + lowestY) * 0.5f;
-}
-void clusterPoints() {
-  resetSimilarPoints();
-  int xLimit = FIELD_X_CM;
-  int yLimit = FIELD_Y_CM;
-
-  // Cluster X-Werte
-  for (int i = 0; i < 360; i++) {
-    int Xdiv10 = points360[i].x / 10;
-    if (abs(Xdiv10) < xLimit) {
-      if (Xdiv10 >= 0)
-        similarPointsX[Xdiv10][0]++;
-      else
-        similarPointsX[abs(Xdiv10)][1]++;
-    }
-  }
-  mostCommonX = 0;
-  mostCommonXValue = 0;
-  for (int i = 0; i < xLimit + 1; i++) {
-    if (similarPointsX[i][0] > mostCommonXValue) {
-      mostCommonXValue = similarPointsX[i][0];
-      mostCommonX = i;
-    }
-    if (similarPointsX[i][1] > mostCommonXValue) {
-      mostCommonXValue = similarPointsX[i][1];
-      mostCommonX = -i;
-    }
-  }
-
-  // Cluster Y-Werte
-  for (int i = 0; i < 360; i++) {
-    int Ydiv10 = points360[i].y / 10;
-    if (abs(Ydiv10) < yLimit) {
-      if (Ydiv10 >= 0)
-        similarPointsY[Ydiv10][0]++;
-      else
-        similarPointsY[abs(Ydiv10)][1]++;
-    }
-  }
-  mostCommonY = 0;
-  mostCommonYValue = 0;
-  for (int i = 0; i < yLimit + 1; i++) {
-    if (similarPointsY[i][0] > mostCommonYValue) {
-      mostCommonYValue = similarPointsY[i][0];
-      mostCommonY = i;
-    }
-    if (similarPointsY[i][1] > mostCommonYValue) {
-      mostCommonYValue = similarPointsY[i][1];
-      mostCommonY = -i;
-    }
-  }
-
-  // Markiere Punkte nahe an den Wänden
-  for (int i = 0; i < 360; i++) {
-    if ((points360[i].x <= (highestX + 1) * 10 && points360[i].x > highestX * 10 - wallPuffer) ||
-        (points360[i].x >= (lowestX - 1) * 10 && points360[i].x < lowestX * 10 + wallPuffer)) {
-      points360[i].status = 1;
-    }
-    if ((points360[i].y <= (highestY + 1) * 10 && points360[i].y > highestY * 10 - wallPuffer) ||
-        (points360[i].y >= (lowestY - 1) * 10 && points360[i].y < lowestY * 10 + wallPuffer)) {
-      points360[i].status = 1;
-    }
-  }
-
-  noClusterPoints = 0;
-  for (int i = 0; i < 360; i++) {
-    if (points360[i].status != 1 && points360[i].distance > selfSize)
-      noClusterPoints++;
-  }
-
-  // Objekterkennung: Gruppiere benachbarte Punkte
-  objects.clear();
-  for (int i = 0; i < 360; i++) {
-    if (points360[i].status != 1 && points360[i].distance > selfSize) {
-      int startPoint = i;
-      int endPoint = i;
-      for (int j = i + 1; j < 360; j++) {
-        if (points360[j].status != 1 && points360[j].distance > selfSize)
-          endPoint = j;
-        else {
-          i = j;
-          break;
+void resetPoints360() {
+    for(int i=0; i<360; i++) {
+        points360[i].age++; 
+        if(points360[i].age > 5) { 
+             points360[i].distance = 0;
+             points360[i].status = 999;
         }
-      }
-      if (endPoint - startPoint > 2) {
-        int midPoint = (startPoint + endPoint) / 2;
-        Vec2 midpointCoords;
-        midpointCoords.x = -points360[midPoint].x;
-        midpointCoords.y = -points360[midPoint].y;
-        int sqDist = midpointCoords.x * midpointCoords.x + midpointCoords.y * midpointCoords.y;
-        if (sqDist > 180 * 180)
-          objects.push_back(midpointCoords);
-      }
     }
-  }
 }
 
-void setBotX() {
-  int xLimit = FIELD_X_CM;
-  for (int i = 0; i < xLimit + 1; i++) {
-    if (similarPointsX[xLimit - i][0] > 1) {
-      highestX = xLimit - i;
-      break;
+// -----------------------------------------------------------------
+// Gyro Drift Korrektur (nutzt mm Punkte für Präzision)
+// -----------------------------------------------------------------
+void correctGyroDrift(int bestX_cm, int bestY_cm) {
+    long sumX = 0, sumY = 0;
+    long sumXY = 0, sumXX = 0, sumYY = 0;
+    int count = 0;
+
+    bool useVerticalWall = (abs(bestX_cm) > 0);
+    // Ziel-Distanz in mm umrechnen, da points360 in mm sind
+    int targetDistMm = abs(bestX_cm) * 10; 
+    int toleranceMm = 150; 
+
+    bool useHorizontalWall = false;
+    if (!useVerticalWall && abs(bestY_cm) > 0) {
+        useHorizontalWall = true;
+        targetDistMm = abs(bestY_cm) * 10;
     }
-  }
-  for (int i = 0; i < xLimit + 1; i++) {
-    if (similarPointsX[xLimit - i][1] > 1) {
-      lowestX = -(xLimit - i);
-      break;
+
+    if (!useVerticalWall && !useHorizontalWall) return;
+
+    for (int i = 0; i < 360; i++) {
+        if (points360[i].distance == 0 || points360[i].status == 999) continue;
+        
+        int px = points360[i].x; // mm
+        int py = points360[i].y; // mm
+
+        if (useVerticalWall) {
+            if (abs(abs(px) - targetDistMm) < toleranceMm) {
+                sumX += px; sumY += py;
+                sumXY += (long)px * py; sumYY += (long)py * py;
+                count++;
+            }
+        } else {
+            if (abs(abs(py) - targetDistMm) < toleranceMm) {
+                sumX += px; sumY += py;
+                sumXY += (long)px * py; sumXX += (long)px * px;
+                count++;
+            }
+        }
     }
-  }
-  Player.x = (highestX + lowestX) / 2.0f;
+
+    if (count < 10) return;
+
+    float angleErrorRad = 0.0f;
+
+    if (useVerticalWall) {
+        float numerator = (float)count * sumXY - (float)sumX * sumY;
+        float denominator = (float)count * sumYY - (float)sumY * sumY;
+        if (abs(denominator) > 1e-3) angleErrorRad = numerator / denominator; 
+    } else {
+        float numerator = (float)count * sumXY - (float)sumX * sumY;
+        float denominator = (float)count * sumXX - (float)sumX * sumX;
+        if (abs(denominator) > 1e-3) angleErrorRad = - (numerator / denominator); 
+    }
+
+    float errorDeg = angleErrorRad * (180.0f / PI);
+    if (abs(errorDeg) > 10.0f) return; 
+
+    float gain = 0.01f; 
+    gyro.adjustOffset(errorDeg * gain); 
 }
 
-void setBotY() {
-  int yLimit = FIELD_Y_CM;
-  for (int i = 0; i < yLimit + 1; i++) {
-    if (similarPointsY[yLimit - i][0] > 1) {
-      highestY = yLimit - i;
-      break;
+// -----------------------------------------------------------------
+// EKF & Clustering Logik
+// -----------------------------------------------------------------
+void processPositionEKF() {
+    resetSimilarPoints();
+
+    // 1. Histogramm füllen
+    for (int i = 0; i < 360; ++i) {
+        if (points360[i].distance == 0 || points360[i].status == 999) continue;
+        
+        // Umrechnung mm -> cm für das Histogramm
+        int xCm = points360[i].x / 10;
+        int yCm = points360[i].y / 10;
+
+        if (abs(xCm) <= FIELD_X_CM) {
+            (xCm >= 0) ? similarPointsX[xCm][0]++ : similarPointsX[-xCm][1]++;
+        }
+        if (abs(yCm) <= FIELD_Y_CM) {
+            (yCm >= 0) ? similarPointsY[yCm][0]++ : similarPointsY[-yCm][1]++;
+        }
     }
-  }
-  for (int i = 0; i < yLimit + 1; i++) {
-    if (similarPointsY[yLimit - i][1] > 1) {
-      lowestY = -(yLimit - i);
-      break;
-    }
-  }
-  Player.y = (highestY + lowestY) / 2.0f;
+
+    // 2. Wände suchen (Indices sind in CM)
+    int highestX = 0, lowestX = 0;
+    int highestY = 0, lowestY = 0;
+
+    for (int i = FIELD_X_CM; i >= 0; --i) { if (similarPointsX[i][0] > 1) { highestX = i; break; } }
+    for (int i = FIELD_X_CM; i >= 0; --i) { if (similarPointsX[i][1] > 1) { lowestX = -i; break; } }
+    for (int i = FIELD_Y_CM; i >= 0; --i) { if (similarPointsY[i][0] > 1) { highestY = i; break; } }
+    for (int i = FIELD_Y_CM; i >= 0; --i) { if (similarPointsY[i][1] > 1) { lowestY = -i; break; } }
+
+    // Position berechnen IN CM
+    // Hinweis: highestX und lowestX sind cm-Indices.
+    // Beispiel: Wand bei 80cm, Wand bei -80cm -> (80 + (-80)) / 2 = 0 cm.
+    // Beispiel: Wand bei 180cm (nur eine Seite sichtbar). highestX=180, lowestX=0.
+    // Der EKF glättet den Sprung, wenn eine Wand verschwindet.
+    // Wir nutzen hier KEIN * 10.0f mehr!
+    
+    float rawX = (highestX + lowestX) * 0.5f;
+    float rawY = (highestY + lowestY) * 0.5f;
+
+    // 3. Kalman Update Position (Werte sind jetzt cm)
+    unsigned long now = millis();
+    float dt = (now - lastKalmanTime) / 1000.0f;
+    if (dt <= 0) dt = 0.001f; if (dt > 0.1f) dt = 0.1f;
+    lastKalmanTime = now;
+
+    bool updateX = (highestX != 0 || lowestX != 0);
+    bool updateY = (highestY != 0 || lowestY != 0);
+
+    Player.x = updateX ? kalmanX.update(rawX, dt) : kalmanX.update(kalmanX.getEstimate(), dt);
+    Player.y = updateY ? kalmanY.update(rawY, dt) : kalmanY.update(kalmanY.getEstimate(), dt);
+
+    // 4. Gyro Drift korrigieren
+    int bestWallX = (highestX != 0) ? highestX : lowestX;
+    int bestWallY = (highestY != 0) ? highestY : lowestY;
+    
+    correctGyroDrift(bestWallX, bestWallY);
 }
 
-void calculateBotPos() {
-  setBotX();
-  setBotY();
-}
 
 void lidaar() {
   lidarsensor.loop();
+  
   double angleRadians = gyro.getAngleRadians();
   double cosTheta = cos(angleRadians);
   double sinTheta = sin(angleRadians);
 
-  // Gehe über alle LiDAR-Messungen
   for (int i = 0; i < POINTCLOUD_SIZE; i++) {
-    double x = lidarsensor.lidar_points[i].y; // x und y getauscht
-    double y = lidarsensor.lidar_points[i].x;
-    if (x == 0 && y == 0)
-      continue;
+    double lx = lidarsensor.lidar_points[i].y; 
+    double ly = lidarsensor.lidar_points[i].x;
 
-    double xRotated = x * cosTheta - y * sinTheta;
-    double yRotated = x * sinTheta + y * cosTheta;
+    if (lx == 0 && ly == 0) continue;
+
+    // Transformation
+    double xRotated = lx * cosTheta - ly * sinTheta;
+    double yRotated = lx * sinTheta + ly * cosTheta;
+    
     double xAdjusted = yRotated;
     double yAdjusted = xRotated * (-1);
 
-    int angleDeg = static_cast<int>(atan2(yAdjusted, xAdjusted) * 180.0 / PI);
-    if (angleDeg < 0)
-      angleDeg += 360;
+    int angleDeg = (int)(atan2(yAdjusted, xAdjusted) * 180.0 / PI);
+    if (angleDeg < 0) angleDeg += 360;
     int index = angleDeg % 360;
-    int distance = static_cast<int>(sqrt(xAdjusted * xAdjusted + yAdjusted * yAdjusted));
+    
+    int distance = (int)hypot(xAdjusted, yAdjusted);
 
-    points360[index].distance  = distance;
-    points360[index].intensity = lidarsensor.lidar_points[i].intensity;
-    points360[index].age       = 0;
-    points360[index].x         = static_cast<int>(xAdjusted);
-    points360[index].y         = static_cast<int>(yAdjusted);
-    points360[index].status    = 0;
+    if (distance <= 4000 && distance >= 100) {
+        points360[index].distance  = distance;
+        points360[index].intensity = lidarsensor.lidar_points[i].intensity;
+        points360[index].age       = 0;
+        // Speichern in MM für interne Präzision (Drift-Korrektur)
+        points360[index].x         = (int16_t)xAdjusted;
+        points360[index].y         = (int16_t)yAdjusted;
+        points360[index].status    = 0;
+    }
   }
 
-  countCycle();
-  filterPoints();
-  // clusterPoints();
-  clusterForPos();
-  calculateBotPos();
-
+  resetPoints360();
+  processPositionEKF();
 }
 
 void LidarBegin()
 {
   lidarsensor.begin(&Serial1);
+  kalmanX.setEstimate(0.0f);
+  kalmanY.setEstimate(0.0f);
+  lastKalmanTime = millis();
 }

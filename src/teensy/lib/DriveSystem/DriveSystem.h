@@ -84,7 +84,7 @@ private:
 
   // ------------- Tuning / Parameter -------------
   // Oberes PWM-Limit (wird für Mapping genutzt)
-  int   MAX_PWM_OUTPUT = 180;
+  int   MAX_PWM_OUTPUT = 250;
 
   // Umrechnung Rotation -> tangentiale Geschwindigkeit: v_tan = r * rot_to_lin
   float rot_to_lin = 0.18f;   // [m] Roboter-"Radius" zur Drehachse
