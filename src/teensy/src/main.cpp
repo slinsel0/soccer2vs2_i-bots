@@ -9,34 +9,42 @@
 #include <PIDController.h>
 #include <math.h>
 #include <outofbounce.h>
+#include <keeper.h>
+
+
 
 COBSPacketSerial cobsSerial;
 FastCRC32 CRC32;
-Adafruit_BNO055 bno(55, 0x28); // 0x28 oder 0x29, je nach ADR-Pin
 
 GyroSystem gyro;
 
 DriveSystem Drive;
 
 PIDController pidg(8.0f,  0.001f,   1.5f, 0.0f,  25.0f);
-PIDController pidb(4.0f,  0.000f,   0.0f, 0.0f,  25.0f);
+PIDController pidb(8.0f,  0.001f,   1.5f, 0.0f,  25.0f);
 
-PIDController pidx(2.60, 0.001f, 2.0f, 0.0f, 20.0f);
-PIDController pidy(2.6, 0.001f, 2.0f, 0.0f, 20.0f);
+PIDController pidx(2.6f, 0.001f, 2.0f, 0.0f, 20.0f);
+PIDController pidy(2.6f, 0.001f, 2.0f, 0.0f, 20.0f);
 
 static const BoundsConfig kBounds = {
-  /* xLimit     */ 80.0f,    // halbe kurze Seite
-  /* yLimit     */ 100.5f,   // halbe lange Seite
-  /* softMargin */ 26.0f,    // 20 cm vor Linie: Soft-Bremse
-  /* hardMargin */  18.5f,    // 8 cm vor Linie: Hard-Pushback
-  /* kPush      */  0.85f,    // mittlerer Rückstoß
-  /* maxSoft    */ 70.0f,    // max Speed in Soft-Zone
-  /* maxHard    */ 46.0f     // max Speed in Hard-Zone
+  /* xLimit      */ 80.0f,    // halbe kurze Seite
+  /* yLimit      */ 100.5f,   // halbe lange Seite
+
+  // getrennte Margins für X- und Y-Richtung:
+  /* softMarginX */ 26.0f,    // X: 20 cm vor Linie (Soft-Bremse)
+  // /* softMarginY */ 26.0f,    // Y: 20 cm vor Linie (Soft-Bremse)
+  // /* hardMarginX */ 5.5f,    // X: 8 cm vor Linie (Hard-Pushback)
+  /* hardMarginY */ 18.5f,    // Y: 8 cm vor Linie (Hard-Pushback)
+
+  /* kPush       */  0.85f,   // mittlerer Rückstoß
+  /* maxSoft     */ 70.0f,    // max Speed in Soft-Zone
+  /* maxHard     */ 46.0f     // max Speed in Hard-Zone
 };
+
 static const BoundsExtras kExtras = {
   /* yEscapeThresh           */ 20.0f,  // "hinter/vor mir" in lokalen cm
   /* xEscapeThresh           */ 30.0f,  // "deutlich andere Seite" in lokalen cm
-  /* enableDirectionalEscape */ false
+  /* enableDirectionalEscape */ false 
 };
 
 
@@ -47,6 +55,9 @@ float pdg = 0.0f;
 float fp_x =0.0f;
 float fp_y =0.0f;
 float ballAngleGlobalDeg = 0.0f;
+float finaldrivex = 0.0f;
+float finaldrivey = 0.0f;
+
 
 
 
@@ -69,7 +80,7 @@ volatile uint32_t last_t_us = 0;
 volatile bool     got_cmd = false;
 volatile uint32_t last_cmd_ms = 0;
 
-constexpr uint32_t CMD_TIMEOUT_MS = 200; // reset quickly when command stream stalls
+constexpr uint32_t CMD_TIMEOUT_MS = 100; // reset quickly when command stream stalls
 
 
 
@@ -126,7 +137,7 @@ static Vec2 computeBehindBallTarget(float ballX, float ballY) {
       offset.y = 0.0f;
 
     } else {
-      offset.y = 70.0f;
+      offset.y = 80.0f;
     }
   } else {
     if (ballX < 0.0f) {
@@ -180,28 +191,60 @@ void loop() {
   lidaar();   // Funktion für LiDAR-Daten
   gyro.update();
   g_a = gyro.getAngleDegrees();
-  // float bs = gyro.getAngleRadians(); // pdg bleibt wahrscheinlich float
+//   Serial.print(">g_a:");
+// Serial.println(g_a);
 
 
-  float pdg = pidg.update(g_a); // pdg bleibt wahrscheinlich float
+// nils(2.0f);
+  float pdg = pidg.update(g_a);
 
 
   p_x = Player.x;
   p_y = Player.y;
 
+  // float bs = gyro.getAngleRadians(); // pdg bleibt wahrscheinlich float
+   Vec2 ballLocal = { last_vx, last_vy };
 
-
-
-
-
-
-  Vec2 ballLocal = { last_vx, last_vy };
 
   ballLocal.x += 25;
+keeper(Player,ballLocal);
+
+
+
+
+
+    //  float ballRadiants = atan2(ballLocal.x,ballLocal.y);
+
+
+
+
+
+
+  //  float  balllDegrees =  ballRadiants * 180.0f / PI;
+
+
+  //  if (balllDegrees > 180.0f) {
+  //       balllDegrees -= 360.0f;
+  //   }
+
+
+  //  float ball_gyro_heading = g_a + balllDegrees; 
+// Serial.println(balllDegrees);
+  // pdg bleibt wahrscheinlich float
+  // float suiii =pidb.update(ball_gyro_heading);
+
+
+
+
+
+
+
+
+
   Vec2 v = computeBehindBallTarget(ballLocal.x, ballLocal.y);
 
 
-  
+ 
   float finalbvx = pidx.update(v.x);
   float finalbvy = pidy.update(v.y);
 
@@ -212,36 +255,44 @@ void loop() {
 
 
 
-  uint32_t nowMs = millis();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+finaldrivex = ball.x;
+finaldrivey = ball.y;
+
+
+    if (!got_cmd ) {
+       ballLocal.x -= 25;
+
+    finaldrivex = -p_x*2;
+    finaldrivey = -p_y*2;
+  }
+
+
+    uint32_t nowMs = millis();
   if (got_cmd && (nowMs - last_cmd_ms) > CMD_TIMEOUT_MS) {
     got_cmd = false;
   }
 
 
-  if (!got_cmd ) {
-       ballLocal.x -= 25;
 
-    ball.x = -p_x*2;
-    ball.y = -p_y*2;
-  }
-
-
-  // ballAngleGlobalDeg = computeBallAngleErrorDeg(ballLocal);
-
-  // 2. PID drüberjagen → gibt dir die Drehgeschwindigkeit
-  // float turnCmd = pidb.update(ballAngleGlobalDeg);
-
-  // Serial.print("ballLocal.x ");
-
-  // Serial.println(ballLocal.x );
-
-  //  Serial.print("ballLocal.y ");
-
-  // Serial.println(ballLocal.y );
-
-
-
-   Drive.calcDrive(ball.x, -ball.y, -pdg);
+    Drive.calcDrive(finaldrivex, -finaldrivey, -pdg);
 
 
   Drive.drive();

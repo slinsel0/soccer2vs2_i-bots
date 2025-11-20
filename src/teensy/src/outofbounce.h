@@ -14,12 +14,18 @@ struct Vec2 {
 struct BoundsConfig {
   float xLimit;        // halbe kurze Seite (x)
   float yLimit;        // halbe lange Seite (y)
-  float softMargin;    // ab diesem Abstand zur Grenze: sanfte Drossel
-  float hardMargin;    // noch näher/über Grenze: harter Rückstoß
+
+  // getrennte Margins für X- und Y-Richtung
+  float softMargin;   // ab diesem Abstand zur X-Grenze: sanfte Drossel
+  // float softMarginY;   // ab diesem Abstand zur Y-Grenze: sanfte Drossel
+  // float hardMarginX;   // noch näher/über X-Grenze: harter Rückstoß
+  float hardMargin;   // noch näher/über Y-Grenze: harter Rückstoß
+
   float kPush;         // P-Verstärkung für den Rückstoß ins Feld
   float maxSoft;       // max. Achs-Speed in Soft-Zone
   float maxHard;       // max. Achs-Speed in Hard-Zone
 };
+
 
 // Zusatz-Logik für "intelligentes" Entkommen (Escape)
 struct BoundsExtras {

@@ -6,37 +6,33 @@ PIDController::PIDController(float p, float i, float d, unsigned long timeStepMs
 {
 }
 
-float PIDController::update(float error) {
-    unsigned long currentTime = millis();
-    unsigned long elapsedTime = currentTime - _lastTime;
-    
-    if (elapsedTime >= _timeStepMs) {
-        // Verwende deltaTime in Millisekunden (keine Umrechnung in Sekunden)
-        float deltaTime = float(elapsedTime);
 
-        // P-Anteil
-        float outP = _p * error;
-        
-        // I-Anteil (Anti-Windup, Tuning: _i in [pro ms])
-        _integral += error * deltaTime;
-        if (_integral > _outILimit)
-            _integral = _outILimit;
-        else if (_integral < -_outILimit)
-            _integral = -_outILimit;
-        float outI = _i * _integral;
-        
-        // D-Anteil (Tuning: _d in [pro ms])
-        float derivative = (deltaTime > 0.0f) ? (error - _prevError) / deltaTime : 0.0f;
-        float outD = _d * derivative;
-        
-        // Zustände aktualisieren
-        _prevError = error;
-        _lastTime = currentTime;
-        _lastOutput = outP + outI + outD;
-        
-        return _lastOutput;
-    }
-    // Ist der Update-Zeitraum noch nicht erreicht, wird der letzte berechnete Wert zurückgegeben.
+
+
+ void PIDController::reset() {
+    _integral = 0.0f;
+    _prevError = 0.0f;
+    _lastOutput = 0.0f;
+}
+
+
+float PIDController::update(float error) {
+    unsigned long now = millis();
+    unsigned long dt_ms = now - _lastTime;
+    if (dt_ms < _timeStepMs) return _lastOutput;
+
+    float dt = float(dt_ms) / 1000.0f; // Sekunden!
+    _lastTime = now;
+
+    // I-Anteil mit Anti-Windup
+    _integral += error * dt;
+    float iTerm = _i * _integral;
+    iTerm = constrain(iTerm, -_outILimit, _outILimit);
+
+    float d = (dt > 0.f) ? (error - _prevError) / dt : 0.f;
+    _prevError = error;
+
+    _lastOutput = _p * error + iTerm + _d * d;
     return _lastOutput;
 }
 

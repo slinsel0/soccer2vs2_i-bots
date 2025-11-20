@@ -14,6 +14,8 @@ class PIDController {
     // PD-Update (ohne Integralanteil)
     float updatePD(float error);
 
+      void reset();
+
   private:
     float _p;
     float _i;

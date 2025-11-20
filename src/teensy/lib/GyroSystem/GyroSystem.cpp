@@ -11,14 +11,14 @@ GyroSystem::GyroSystem()
 void GyroSystem::begin()
 {
     // BNO055 starten
-    if (!bno.begin(OPERATION_MODE_IMUPLUS))
+    if (!bno.begin())
     {
         Serial.println("Could not find a BNO055 sensor!");
         // Endlosschleife, falls Sensor nicht gefunden
         while (!bno.begin()) {
             Serial.println("Could not find a BNO055 sensor!");
 
-            delay(500);
+            delay(10);
          }
     }
 
@@ -26,7 +26,6 @@ void GyroSystem::begin()
     bno.setExtCrystalUse(true);
 
   
-
 
 
     
