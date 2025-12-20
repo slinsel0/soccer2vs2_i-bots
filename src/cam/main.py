@@ -29,7 +29,7 @@ CALIB_CAM1 = "oioio.npz"   # K, D, image_size
 FISHEYE_BALANCE = 0.80                      # 0..1
 
 # --- Kamera-Steuerung ---
-EXPOSURE_TIME_US = 15000
+EXPOSURE_TIME_US = 30000
 FPS = 60
 
 # --- BallTracker-Konfig (extern aus JSON) ---

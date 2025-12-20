@@ -29,15 +29,15 @@ PIDController pidy(2.5f, 0.0f, 0.0f, 0.0f, 0.0f);
 
 // --- GRENZEN ---
 static const BoundsConfig kBounds = {
-  /* xLimit      */ 80.0f,    // Fast an der Wand (91)
-  /* yLimit      */ 100.0f,   // Fast an der Wand (121.5)
+  /* xLimit      */ 85.0f,    // (Optional) Etwas näher an die echte Wand (90), wenn sicher
+  /* yLimit      */ 115.0f,   // (Optional) Etwas näher an die echte Wand (120)
   
-  /* softMargin  */ 35.0f,    // Bremsen beginnt bei X=55 / Y=85 (Viel Platz!)
-  /* hardMargin  */ 12.0f,    // Rückstoß beginnt bei X=78 / Y=108 (Sicherheitsabstand)
+  /* softMargin  */ 20.0f,    // VORHER: 35.0f -> Jetzt bremst er erst 20cm vor der Grenze
+  /* hardMargin  */ 10.0f,    // Sicherheitsabstand
   
-  /* kPush       */  1.0f,    // Kräftiger Rückstoß
-  /* maxSoft     */ 100.0f,   // Erlaube höhere Geschwindigkeit in der Randzone
-  /* maxHard     */ 50.0f     
+  /* kPush       */  1.5f,    // Rückstoß etwas stärker
+  /* maxSoft     */ 200.0f,   // VORHER: 100.0f -> Erlaube vollen Speed am Anfang der Bremszone!
+  /* maxHard     */ 80.0f     
 };
 
 static const BoundsExtras kExtras = {
