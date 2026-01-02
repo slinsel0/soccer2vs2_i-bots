@@ -95,6 +95,8 @@ def run_camera(config, stop_event, frame_ready_event):
     finally:
         try:
             picam2.stop()
+            picam2.close()
+
         except:
             pass
         try:

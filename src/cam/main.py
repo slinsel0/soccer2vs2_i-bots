@@ -60,6 +60,7 @@ def main():
             time.sleep(1)
             # Optional: Watchdog logic here
             for p in processes:
+                p.join(timeout=5.0)
                 if not p.is_alive():
                     print(f"Process {p.name} died! Shutting down...")
                     raise KeyboardInterrupt

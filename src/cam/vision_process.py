@@ -132,8 +132,8 @@ def run_vision(config, stop_event, frame_ready_event, result_queue):
             # --- Visualisierung (Nur wenn aktiviert) ---
             if debug_mode:
                 try:
-                    # Kopie für Zeichnen (OpenCV braucht BGR, wir haben RGB im RAM)
                     vis_frame = frame
+                    
                     
                     # Zeichne Donut-Grenzen
                     cv2.circle(vis_frame, (geo.cx, geo.cy), geo.r_inner, (255, 0, 0), 1)
@@ -153,7 +153,6 @@ def run_vision(config, stop_event, frame_ready_event, result_queue):
                     mask_bgr = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
                     mask_small = cv2.resize(mask_bgr, (160, 120))
                     vis_frame[0:120, 0:160] = mask_small
-                    
                     cv2.imshow("Debug View", vis_frame)
                     
                     if cv2.waitKey(1) & 0xFF == ord('q'):

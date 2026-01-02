@@ -3,7 +3,7 @@
         "camera_index": 0,
         "width": 640,
         "height": 640,
-        "fps": 60,
+        "fps": 30,
         "exposure_us": 15000,
         "iso": 800,
         "shm_name": "shm_cam_frame"
@@ -16,7 +16,7 @@
         "distance_poly_coeffs": [0.0, 1.5, 0.0] 
     },
     "vision": {
-        "debug_view": true,
+        "debug_view": false,
         "ball": {
             "h_min": 0, "h_max": 15,
             "s_min": 150, "s_max": 255,
