@@ -13,6 +13,9 @@ def run_camera(config, stop_event, frame_ready_event):
     from picamera2 import Picamera2
     import libcamera
 
+    # Lese Index aus Config. Wenn leer oder nicht vorhanden -> None (Auto-Detect)
+    camera_idx = config['camera'].get('camera_index') 
+    
     width = config['camera']['width']
     height = config['camera']['height']
     fps = config['camera']['fps']
@@ -29,7 +32,17 @@ def run_camera(config, stop_event, frame_ready_event):
     shared_frame = np.ndarray((height, width, 3), dtype=np.uint8, buffer=shm.buf)
 
     # Initialize Camera
-    picam2 = Picamera2(0) # Index 0 or 1
+    try:
+        if camera_idx is not None:
+            print(f"[CAM] Initializing Picamera2 (Index: {camera_idx})...")
+            picam2 = Picamera2(camera_idx)
+        else:
+            print(f"[CAM] Initializing Picamera2 (Auto-Detect)...")
+            picam2 = Picamera2() # Leere Klammer -> sucht erste verfügbare Kamera
+    except Exception as e:
+        print(f"[CAM] CRITICAL ERROR: Could not open camera. Error: {e}")
+        stop_event.set()
+        return
     
     # Configure Controls
     controls = {
@@ -40,16 +53,23 @@ def run_camera(config, stop_event, frame_ready_event):
         "AwbEnable": False,
         # Optimize for CV
         "Sharpness": 1.0,
-        "Contrast": 1.1, 
-        "Saturation": 1.5 
+        "Contrast": 1.0, 
+        "Saturation": 1.2,
+        "NoiseReductionMode": libcamera.controls.draft.NoiseReductionModeEnum.Off
+
+
+        
+
+
     }
     
     vid_config = picam2.create_video_configuration(
         main={"format": "RGB888", "size": (width, height)},
         controls=controls
     )
-    # Add Flip if necessary (mirror mounted upside down?)
-    # vid_config["transform"] = libcamera.Transform(hflip=True, vflip=True)
+    
+    # Optional: Transform (Flip/Rotation)
+    vid_config["transform"] = libcamera.Transform(hflip=False, vflip=True)
     
     picam2.configure(vid_config)
     picam2.start()
@@ -59,11 +79,6 @@ def run_camera(config, stop_event, frame_ready_event):
     try:
         while not stop_event.is_set():
             # Zero-copy capture directly into shared memory buffer
-            # Note: Picamera2 capture_array usually allocates new memory. 
-            # We use capture_request to get the buffer or copy efficiently.
-            # For simplicity in this wrapper, we capture and copy, 
-            # but picam2.capture_file/array can be optimized further with request objects.
-            
             temp_frame = picam2.capture_array()
             
             # Write to shared memory
@@ -72,13 +87,19 @@ def run_camera(config, stop_event, frame_ready_event):
             # Signal vision process
             frame_ready_event.set()
             
-            # Optional: yield slightly to prevent CPU hogging if FPS limit handles it
-            # time.sleep(0.001) 
+            # Optional: yield slightly to prevent CPU hogging
+            # time.sleep(0.0001)
 
     except Exception as e:
-        print(f"[CAM] Error: {e}")
+        print(f"[CAM] Error during loop: {e}")
     finally:
-        picam2.stop()
-        shm.close()
-        shm.unlink() # Cleanup shared memory
+        try:
+            picam2.stop()
+        except:
+            pass
+        try:
+            shm.close()
+            shm.unlink() # Cleanup shared memory
+        except:
+            pass
         print("[CAM] Stopped.")

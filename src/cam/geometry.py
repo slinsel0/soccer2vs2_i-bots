@@ -26,11 +26,16 @@ class GeometryTransformer:
 
         # 2. Pixel radius and Angle (Vectorized if x/y are arrays)
         r_px = np.sqrt(dx**2 + dy**2)
-        angle = np.arctan2(dy, dx) # Result in -pi to +pi
+        angle = np.arctan2(dx, dy) # Result in -pi to +pi
 
         # 3. Map Pixel-Radius to Real-World-Distance
         # Using polynomial approximation for the convex mirror curvature
-        dist_mm = np.polyval(reversed(self.poly_coeffs), r_px)
+        # np.polyval expects coeffs in descending order (highest power first).
+        # We assume config has ascending (c0, c1, ...), so we reverse.
+        
+        # FIX: Convert iterator to list explicitly!
+        coeffs_desc = list(reversed(self.poly_coeffs))
+        dist_mm = np.polyval(coeffs_desc, r_px)
 
         return dist_mm, angle
 
