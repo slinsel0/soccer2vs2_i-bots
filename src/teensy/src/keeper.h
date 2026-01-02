@@ -32,6 +32,4 @@ struct Vec2 {
 
 void keeper (Vec2 player,Vec2 ball);
 
-
-
-
+void json_extraction ();
