@@ -12,15 +12,17 @@
         "center_x": 365,
         "center_y": 269,
         "radius_outer": 230,
-        "radius_inner": 50,
-        "distance_poly_coeffs": [0.0, 1.5, 0.0] 
+        "radius_inner": 50
     },
     "vision": {
         "debug_view": false,
         "ball": {
-            "h_min": 0, "h_max": 15,
-            "s_min": 150, "s_max": 255,
-            "v_min": 100, "v_max": 255,
+            "h_min": 0,
+            "h_max": 15,
+            "s_min": 150,
+            "s_max": 255,
+            "v_min": 100,
+            "v_max": 255,
             "min_area_px": 1,
             "max_area_px": 5000,
             "merge_distance": 1

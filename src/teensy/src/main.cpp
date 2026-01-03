@@ -131,10 +131,13 @@ void loop() {
 
   // 2. Ball Position holen
   Vec2 ballLocal = { last_vx, last_vy };
-  ballLocal.x += 25; // Kamera Offset?
+
+  Serial.println(last_vx);
+  Serial.println(last_vy);
+  //ballLocal.x += 25; // Kamera Offset?
 
   // Keeper Logik (optional)
-  keeper(Player, ballLocal);
+  // keeper(Player, ballLocal);
 
   // 3. Ziel berechnen & PID anwenden
   Vec2 v = computeBehindBallTarget(ballLocal.x, ballLocal.y);
@@ -154,11 +157,11 @@ void loop() {
     got_cmd = false;
     // Rückkehr zur Mitte wenn Ball verloren? 
     // Vorsichtig: -p_x * 2 ist sehr aggressiv! Lieber stehen bleiben oder sanft bremsen.
-    finaldrivex = -p_x * 2; 
+    finaldrivex = p_x * 2; 
     finaldrivey = -p_y * 2;
   }
 
   // 5. Fahren
-  Drive.calcDrive(finaldrivex, -finaldrivey, -pdg);
-  Drive.drive();
+  Drive.calcDrive(-finaldrivex, -finaldrivey, -pdg);
+  // Drive.drive();
 }

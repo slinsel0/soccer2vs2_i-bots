@@ -118,6 +118,8 @@ def run_vision(config, stop_event, frame_ready_event, result_queue):
                     cy = M['m01'] / M['m00']
                     res_dist, res_angle = geo.pixel_to_polar(cx, cy)
                     found = True
+                    print(f"[VIS] Ball gefunden: D={res_dist:.2f}px, A={res_angle:.2f}°")
+                    print(cx, cy)
                     
                     payload = {
                         'found': True, 'dist': res_dist, 'angle': res_angle,
@@ -146,7 +148,7 @@ def run_vision(config, stop_event, frame_ready_event, result_queue):
                         ball_center = (int(M['m10'] / M['m00']), int(M['m01'] / M['m00']))
                         cv2.line(vis_frame, (geo.cx, geo.cy), ball_center, (0, 255, 255), 1)
                         # Text Info
-                        info_txt = f"Dist: {res_dist:.1f}mm | Ang: {np.degrees(res_angle):.1f}deg"
+                        info_txt = f"Dist: {res_dist:.1f}px | Ang: {np.degrees(res_angle):.1f}deg"
                         cv2.putText(vis_frame, info_txt, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                     
                     # Maske klein einblenden
