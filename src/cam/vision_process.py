@@ -122,7 +122,7 @@ def run_vision(config, stop_event, frame_ready_event, result_queue):
                     print(cx, cy)
                     
                     payload = {
-                        'found': True, 'dist': res_dist, 'angle': res_angle,
+                        'found': True, 'cx': cx, 'cy': cy,
                         't_us': time.perf_counter_ns() // 1000
                     }
                     if not result_queue.full():

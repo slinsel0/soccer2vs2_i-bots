@@ -14,7 +14,7 @@ def run_serial(config, stop_event, result_queue):
     
     ser = None
     
-    # Frame Structure: <BBIfff (ID, Seq, Timestamp, Dist, Angle, Valid)
+    # Frame Structure: <BBIfff (ID, Seq, Timestamp, CX, CY, Valid)
     FMT_BODY = "<BBIfff"
     MSG_ID = 1
     seq = 0
@@ -44,17 +44,17 @@ def run_serial(config, stop_event, result_queue):
             
             if data.get('found', False):
                 t_us = data['t_us']
-                dist = float(data['dist'])
-                angle = float(data['angle'])
+                cx = float(data['cx'])
+                cy = float(data['cy'])
                 valid = 1.0
             else:
                 t_us = time.perf_counter_ns() // 1000
-                dist = 0.0
-                angle = 0.0
+                cx = 0.0
+                cy = 0.0
                 valid = 0.0
 
             # Packen
-            body = struct.pack(FMT_BODY, MSG_ID, seq & 0xFF, t_us & 0xFFFFFFFF, dist, angle, valid)
+            body = struct.pack(FMT_BODY, MSG_ID, seq & 0xFF, t_us & 0xFFFFFFFF, cx, cy, valid)
             
             # CRC & Encoding
             crc = zlib.crc32(body) & 0xFFFFFFFF

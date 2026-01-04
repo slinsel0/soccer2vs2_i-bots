@@ -108,60 +108,70 @@ static Vec2 computeBehindBallTarget(float ballX, float ballY) {
 }
 
 void setup() {
-  gyro.begin(); // IMUPLUS Mode beachten (siehe vorherige Antwort)
-  pinMode(LED_BUILTIN, OUTPUT);
+   gyro.begin(); // IMUPLUS Mode beachten (siehe vorherige Antwort)
+  // pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(2000000);
   cobsSerial.setStream(&Serial);
   cobsSerial.setPacketHandler(&onPacketReceived);
-  Wire1.begin();
+  // Wire1.begin();
   LidarBegin();
 }
 
 void loop() {
+    gyro.update();
   cobsSerial.update(); 
   lidaar();   
-  gyro.update();
+
   
   g_a = gyro.getAngleDegrees();
   p_x = Player.x;
   p_y = Player.y;
 
-  // 1. Rotation berechnen (Heading halten 0°)
+//   // 1. Rotation berechnen (Heading halten 0°)
   float pdg = pidg.update(g_a);
 
-  // 2. Ball Position holen
-  Vec2 ballLocal = { last_vx, last_vy };
+//   // 2. Ball Position holen
 
-  Serial.println(last_vx);
-  Serial.println(last_vy);
-  //ballLocal.x += 25; // Kamera Offset?
+  
+  Vec2 ballLocal = { last_vx - 284.0f, last_vy - 325.0f };
 
-  // Keeper Logik (optional)
-  // keeper(Player, ballLocal);
 
-  // 3. Ziel berechnen & PID anwenden
+//     // Serial.println("Ball local Position:");
+//     // Serial.println(last_vx);
+//     // Serial.println(last_vy);
+
+//     // Serial.println("Ball global Position:");
+//     // Serial.println(ballLocal.x);
+//     // Serial.println(ballLocal.y);
+  
+
+
+//   // Keeper Logik (optional)
+//   // keeper(Player, ballLocal);
+
+//   // 3. Ziel berechnen & PID anwenden
   Vec2 v = computeBehindBallTarget(ballLocal.x, ballLocal.y);
   float finalbvx = pidx.update(v.x);
   float finalbvy = pidy.update(v.y);
   Vec2 ballVec = { finalbvx, finalbvy };
 
-  // 4. Feldgrenzen anwenden
-  applyFieldBounds(ballVec, p_x, p_y, kBounds, ballLocal, kExtras);
+//   // 4. Feldgrenzen anwenden
+ applyFieldBounds(ballVec, p_x, p_y, kBounds, ballLocal, kExtras);
 
   finaldrivex = ballVec.x;
   finaldrivey = ballVec.y;
 
-  // Timeout Safety
+//   // Timeout Safety
   uint32_t nowMs = millis();
   if (!got_cmd || (nowMs - last_cmd_ms) > CMD_TIMEOUT_MS) {
     got_cmd = false;
     // Rückkehr zur Mitte wenn Ball verloren? 
     // Vorsichtig: -p_x * 2 ist sehr aggressiv! Lieber stehen bleiben oder sanft bremsen.
-    finaldrivex = p_x * 2; 
-    finaldrivey = -p_y * 2;
+    finaldrivex = 0; 
+    finaldrivey = 0;
   }
 
   // 5. Fahren
-  Drive.calcDrive(-finaldrivex, -finaldrivey, -pdg);
-  // Drive.drive();
+  Drive.calcDrive(-finaldrivex, finaldrivey, -pdg);
+    Drive.drive();
 }

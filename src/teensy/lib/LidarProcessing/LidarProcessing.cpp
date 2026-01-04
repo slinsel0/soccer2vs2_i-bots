@@ -55,68 +55,7 @@ void resetPoints360() {
     }
 }
 
-// -----------------------------------------------------------------
-// Gyro Drift Korrektur (nutzt mm Punkte für Präzision)
-// -----------------------------------------------------------------
-void correctGyroDrift(int bestX_cm, int bestY_cm) {
-    long sumX = 0, sumY = 0;
-    long sumXY = 0, sumXX = 0, sumYY = 0;
-    int count = 0;
 
-    bool useVerticalWall = (abs(bestX_cm) > 0);
-    // Ziel-Distanz in mm umrechnen, da points360 in mm sind
-    int targetDistMm = abs(bestX_cm) * 10; 
-    int toleranceMm = 150; 
-
-    bool useHorizontalWall = false;
-    if (!useVerticalWall && abs(bestY_cm) > 0) {
-        useHorizontalWall = true;
-        targetDistMm = abs(bestY_cm) * 10;
-    }
-
-    if (!useVerticalWall && !useHorizontalWall) return;
-
-    for (int i = 0; i < 360; i++) {
-        if (points360[i].distance == 0 || points360[i].status == 999) continue;
-        
-        int px = points360[i].x; // mm
-        int py = points360[i].y; // mm
-
-        if (useVerticalWall) {
-            if (abs(abs(px) - targetDistMm) < toleranceMm) {
-                sumX += px; sumY += py;
-                sumXY += (long)px * py; sumYY += (long)py * py;
-                count++;
-            }
-        } else {
-            if (abs(abs(py) - targetDistMm) < toleranceMm) {
-                sumX += px; sumY += py;
-                sumXY += (long)px * py; sumXX += (long)px * px;
-                count++;
-            }
-        }
-    }
-
-    if (count < 10) return;
-
-    float angleErrorRad = 0.0f;
-
-    if (useVerticalWall) {
-        float numerator = (float)count * sumXY - (float)sumX * sumY;
-        float denominator = (float)count * sumYY - (float)sumY * sumY;
-        if (abs(denominator) > 1e-3) angleErrorRad = numerator / denominator; 
-    } else {
-        float numerator = (float)count * sumXY - (float)sumX * sumY;
-        float denominator = (float)count * sumXX - (float)sumX * sumX;
-        if (abs(denominator) > 1e-3) angleErrorRad = - (numerator / denominator); 
-    }
-
-    float errorDeg = angleErrorRad * (180.0f / PI);
-    if (abs(errorDeg) > 10.0f) return; 
-
-    float gain = 0.01f; 
-    gyro.adjustOffset(errorDeg * gain); 
-}
 
 // -----------------------------------------------------------------
 // EKF & Clustering Logik
@@ -171,11 +110,8 @@ void processPositionEKF() {
     Player.x = updateX ? kalmanX.update(rawX, dt) : kalmanX.update(kalmanX.getEstimate(), dt);
     Player.y = updateY ? kalmanY.update(rawY, dt) : kalmanY.update(kalmanY.getEstimate(), dt);
 
-    // 4. Gyro Drift korrigieren
-    int bestWallX = (highestX != 0) ? highestX : lowestX;
-    int bestWallY = (highestY != 0) ? highestY : lowestY;
-    
-    correctGyroDrift(bestWallX, bestWallY);
+    // 4. Gyro Drift korrigieren entfernt
+
 }
 
 

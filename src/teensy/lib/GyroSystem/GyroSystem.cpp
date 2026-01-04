@@ -16,7 +16,7 @@ void GyroSystem::begin()
     // OPERATION_MODE_NDOF    = Standard (nutzt Magnetometer -> schlecht bei Motoren)
     // OPERATION_MODE_IMUPLUS = Nur Gyro + Accel (Magnetometer deaktiviert -> stabil)
     
-    if (!bno.begin(OPERATION_MODE_IMUPLUS))
+    if (!bno.begin())
     {
         Serial.println("Fehler: BNO055 nicht gefunden!");
         // Endlosschleife mit Blink-Versuch, falls Sensor fehlt
@@ -42,21 +42,20 @@ void GyroSystem::update()
     float raw = event.orientation.x; 
 
     // Offset anwenden (für Drift-Korrektur durch LiDAR)
-    float corrected = raw + angleOffset;
+    
 
     // Normalisierung auf -180..+180 Grad (damit 0 vorne ist und links/rechts +/-)
     // Der BNO gibt 0..360 aus.
     
     // Erstmal auf 0..360 normalisieren (durch Offset kann es <0 oder >360 sein)
-    while (corrected >= 360.0f) corrected -= 360.0f;
-    while (corrected < 0.0f)    corrected += 360.0f;
+  
 
     // Jetzt Umrechnung in -180..+180
-    if (corrected > 180.0f) {
-        corrected -= 360.0f;
+    if (raw > 180.0f) {
+        raw -= 360.0f;
     }
 
-    gyroDegrees = corrected;
+    gyroDegrees = raw;
     gyroRadiants = gyroDegrees * PI / 180.0f;
 }
 

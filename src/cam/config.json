@@ -9,13 +9,13 @@
         "shm_name": "shm_cam_frame"
     },
     "mirror": {
-        "center_x": 365,
-        "center_y": 269,
-        "radius_outer": 230,
-        "radius_inner": 50
+        "center_x": 284,
+        "center_y": 325,
+        "radius_outer": 300,
+        "radius_inner": 60
     },
     "vision": {
-        "debug_view": false,
+        "debug_view": true,
         "ball": {
             "h_min": 0,
             "h_max": 15,
@@ -23,9 +23,9 @@
             "s_max": 255,
             "v_min": 100,
             "v_max": 255,
-            "min_area_px": 1,
+            "min_area_px": 10,
             "max_area_px": 5000,
-            "merge_distance": 1
+            "merge_distance": 5
         }
     },
     "serial": {
