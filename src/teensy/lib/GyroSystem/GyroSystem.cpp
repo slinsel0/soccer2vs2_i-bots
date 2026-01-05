@@ -1,10 +1,9 @@
 #include "GyroSystem.h"
 #include "Arduino.h"
 
-// Konstruktor: Initialisiert BNO-ID und Variablen
+// Konstruktor: Initialisiert Variablen
 GyroSystem::GyroSystem() 
-  : bno(55, 0x28), // ID 55, Adresse 0x28 (Standard) oder 0x29 prüfen!
-    gyroDegrees(0.0f),
+  : gyroDegrees(0.0f),
     gyroRadiants(0.0f),
     angleOffset(0.0f)
 {
@@ -12,51 +11,79 @@ GyroSystem::GyroSystem()
 
 void GyroSystem::begin()
 {
-    // WICHTIG: Starten im IMUPLUS Modus!
-    // OPERATION_MODE_NDOF    = Standard (nutzt Magnetometer -> schlecht bei Motoren)
-    // OPERATION_MODE_IMUPLUS = Nur Gyro + Accel (Magnetometer deaktiviert -> stabil)
-    
-    if (!bno.begin())
+    // BNO08x mit Standard-I2C-Adresse starten
+    if (!bno08x.begin_I2C())
     {
-        Serial.println("Fehler: BNO055 nicht gefunden!");
-        // Endlosschleife mit Blink-Versuch, falls Sensor fehlt
+        Serial.println("Fehler: BNO08x nicht gefunden!");
         while (true) {
-            if (bno.begin(OPERATION_MODE_IMUPLUS)) break;
-            Serial.println("Suche BNO055...");
+            if (bno08x.begin_I2C()) break;
+            Serial.println("Suche BNO08x...");
             delay(1000);
          }
     }
 
-    // Externen Quarz nutzen (besser für Präzision)
-    bno.setExtCrystalUse(true);
-    
-    Serial.println("BNO055 gestartet im IMUPLUS-Modus (Kein Magnetometer).");
+    Serial.println("BNO08x gefunden!");
+
+    // Game Rotation Vector aktivieren (Kein Magnetometer, ähnlich IMUPLUS)
+    // 10ms Report-Rate (100Hz)
+    if (!bno08x.enableReport(SH2_GAME_ROTATION_VECTOR, 10000)) { 
+        Serial.println("Konnte Game Rotation Vector nicht aktivieren");
+    }
 }
 
 void GyroSystem::update()
 {
-    sensors_event_t event;
-    bno.getEvent(&event);
-
-    // Rohwert vom Sensor (Euler-Winkel X ist das "Heading")
-    float raw = event.orientation.x; 
-
-    // Offset anwenden (für Drift-Korrektur durch LiDAR)
+    sh2_SensorValue_t sensorValue;
     
+    // Prüfen ob neue Daten da sind
+    if (bno08x.getSensorEvent(&sensorValue)) {
+        switch (sensorValue.sensorId) {
+            case SH2_GAME_ROTATION_VECTOR: {
+                // Quaternion-Werte
+                float qi = sensorValue.un.gameRotationVector.i;
+                float qj = sensorValue.un.gameRotationVector.j;
+                float qk = sensorValue.un.gameRotationVector.k;
+                float qr = sensorValue.un.gameRotationVector.real;
+                
+                // Umrechnung Quaternion -> Euler (Yaw / Heading)
+                // Standard-Methode:
+                // yaw = atan2(2*(r*k + i*j), 1 - 2*(j*j + k*k))
+                // (Abhängig von Sensor-Ausrichtung. Hier Standardannahme)
+                
+                float siny_cosp = 2.0f * (qr * qk + qi * qj);
+                float cosy_cosp = 1.0f - 2.0f * (qj * qj + qk * qk);
+                float yaw = atan2(siny_cosp, cosy_cosp);
+                
+                // Radian -> Grad
+                float rawDeg = yaw * 180.0f / PI;
 
-    // Normalisierung auf -180..+180 Grad (damit 0 vorne ist und links/rechts +/-)
-    // Der BNO gibt 0..360 aus.
-    
-    // Erstmal auf 0..360 normalisieren (durch Offset kann es <0 oder >360 sein)
-  
+                // BNO08x liefert -180..+180 (positiv CCW normalerweise)
+                // BNO055 (alt) lieferte 0..360 CW (Clockwise). 
+                // Um Kompatibilität zu wahren (rechts positiv), müssen wir evtl. invertieren.
+                // Wenn wir davon ausgehen, dass rawDeg hier CCW ist (Standard Mathe):
+                // rechts drehen -> Winkel wird negativ
+                // links drehen -> Winkel wird positiv
+                
+                // Der alte Code:
+                // raw = 0..360.
+                // if (raw > 180) raw -= 360.
+                // 10 Grad rechts -> 10.
+                // 10 Grad links -> 350 -> -10.
+                // Also WAR rechts positiv, links negativ.
+                
+                // Wenn atan2 CCW ist:
+                // 10 Grad rechts -> -10.
+                // 10 Grad links -> +10.
+                // -> Wir müssen invertieren, damit rechts positiv ist.
+                
+                rawDeg = -rawDeg; 
 
-    // Jetzt Umrechnung in -180..+180
-    if (raw > 180.0f) {
-        raw -= 360.0f;
+                gyroDegrees = rawDeg;
+                gyroRadiants = gyroDegrees * PI / 180.0f;
+                break;
+            }
+        }
     }
-
-    gyroDegrees = raw;
-    gyroRadiants = gyroDegrees * PI / 180.0f;
 }
 
 float GyroSystem::getAngleDegrees() const 

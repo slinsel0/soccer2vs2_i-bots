@@ -2,7 +2,7 @@
 #define GYRO_SYSTEM_H
 
 #include <Adafruit_Sensor.h>
-#include <Adafruit_BNO055.h>
+#include <Adafruit_BNO08x.h>
 #include <SPI.h>
 #include <Arduino.h>
 
@@ -26,7 +26,7 @@ public:
     void adjustOffset(float deltaDeg);
 
 private:
-    Adafruit_BNO055 bno;
+   Adafruit_BNO08x  bno08x;
     float gyroDegrees;
     float gyroRadiants;
     
