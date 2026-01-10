@@ -15,7 +15,7 @@ class LD19
 {
   private:
     static constexpr int BUFFER_SIZE = 46;
-    static constexpr int POINTCLOUD_SIZE = 400;
+    static constexpr int POINTCLOUD_SIZE = 600;
     static constexpr int startchar = 0x54;
     static constexpr char endChar = startchar;
     static constexpr int speedLSB = 1;

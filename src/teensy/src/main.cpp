@@ -24,8 +24,8 @@ PIDController pidb(6.5f,  0.001f, 0.1f, 0.0f, 25.0f);
 
 // Ball X/Y: D=0.0 ist WICHTIG! D=2.0 hat vorher extrem gebremst.
 // P=2.5 bedeutet: Bei 100px Fehler (Kamera) -> 250 Speed (Vollgas).
-PIDController pidx(2.5f, 0.0f, 0.0f, 0.0f, 0.0f);
-PIDController pidy(2.5f, 0.0f, 0.0f, 0.0f, 0.0f);
+PIDController pidx(2.5f, 0.0f, 2.0f, 0.0f, 0.0f);
+PIDController pidy(2.5f, 0.0f, 2.0f, 0.0f, 0.0f);
 
 // --- GRENZEN ---
 static const BoundsConfig kBounds = {
@@ -170,8 +170,10 @@ void loop() {
     finaldrivex = 0; 
     finaldrivey = 0;
   }
-
+float finalpx = pidx.update(p_x);
+float finalpy = pidy.update(p_y);
   // 5. Fahren
-  Drive.calcDrive(-finaldrivex, finaldrivey, -pdg);
+  //Drive.calcDrive(-finaldrivex, finaldrivey, -pdg);
+  Drive.calcDrive(-finalpx,finalpy,-pdg);
     Drive.drive();
 }
