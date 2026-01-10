@@ -24,8 +24,8 @@ PIDController pidb(6.5f,  0.001f, 0.1f, 0.0f, 25.0f);
 
 // Ball X/Y: D=0.0 ist WICHTIG! D=2.0 hat vorher extrem gebremst.
 // P=2.5 bedeutet: Bei 100px Fehler (Kamera) -> 250 Speed (Vollgas).
-PIDController pidx(2.5f, 0.0f, 2.0f, 0.0f, 0.0f);
-PIDController pidy(2.5f, 0.0f, 2.0f, 0.0f, 0.0f);
+PIDController pidx(0.6f, 0.01f, 0.2f, 0.0f, 100.0f);
+PIDController pidy(0.6f, 0.01f, 0.2f, 0.0f, 100.0f);
 
 // --- GRENZEN ---
 static const BoundsConfig kBounds = {
@@ -119,61 +119,77 @@ void setup() {
 
 void loop() {
     gyro.update();
-  cobsSerial.update(); 
+  // cobsSerial.update(); 
   lidaar();   
 
   
   g_a = gyro.getAngleDegrees();
   p_x = Player.x;
   p_y = Player.y;
+// Serial.print(">Player Position_x:"); 
+// Serial.println(p_x);
+// Serial.print(">Player Position_y:"); 
+// Serial.println(p_y);
+// Serial.print(">Gyro Angle:");
+// Serial.println(g_a);
 
-//   // 1. Rotation berechnen (Heading halten 0°)
   float pdg = pidg.update(g_a);
 
-//   // 2. Ball Position holen
-
-  
-  Vec2 ballLocal = { last_vx - 284.0f, last_vy - 325.0f };
-
-
-//     // Serial.println("Ball local Position:");
-//     // Serial.println(last_vx);
-//     // Serial.println(last_vy);
-
-//     // Serial.println("Ball global Position:");
-//     // Serial.println(ballLocal.x);
-//     // Serial.println(ballLocal.y);
-  
+ float finalpx = pidx.update(p_x);
+ float finalpy = pidy.update(p_y);
+//   // 5. Fahren
+//   //Drive.calcDrive(-finaldrivex, finaldrivey, -pdg);
 
 
-//   // Keeper Logik (optional)
-//   // keeper(Player, ballLocal);
-
-//   // 3. Ziel berechnen & PID anwenden
-  Vec2 v = computeBehindBallTarget(ballLocal.x, ballLocal.y);
-  float finalbvx = pidx.update(v.x);
-  float finalbvy = pidy.update(v.y);
-  Vec2 ballVec = { finalbvx, finalbvy };
-
-//   // 4. Feldgrenzen anwenden
- applyFieldBounds(ballVec, p_x, p_y, kBounds, ballLocal, kExtras);
-
-  finaldrivex = ballVec.x;
-  finaldrivey = ballVec.y;
-
-//   // Timeout Safety
-  uint32_t nowMs = millis();
-  if (!got_cmd || (nowMs - last_cmd_ms) > CMD_TIMEOUT_MS) {
-    got_cmd = false;
-    // Rückkehr zur Mitte wenn Ball verloren? 
-    // Vorsichtig: -p_x * 2 ist sehr aggressiv! Lieber stehen bleiben oder sanft bremsen.
-    finaldrivex = 0; 
-    finaldrivey = 0;
-  }
-float finalpx = pidx.update(p_x);
-float finalpy = pidy.update(p_y);
-  // 5. Fahren
-  //Drive.calcDrive(-finaldrivex, finaldrivey, -pdg);
-  Drive.calcDrive(-finalpx,finalpy,-pdg);
+  Drive.calcDrive(finalpx,-finalpy,-pdg);
     Drive.drive();
+
+//   // 1. Rotation berechnen (Heading ha lten 0°)
+
+// //   // 2. Ball Position holen
+
+  
+//   Vec2 ballLocal = { last_vx - 284.0f, last_vy - 325.0f };
+
+
+// //     // Serial.println("Ball local Position:");
+// //     // Serial.println(last_vx);
+// //     // Serial.println(last_vy);
+
+// //     // Serial.println("Ball global Position:");
+// //     // Serial.println(ballLocal.x);
+// //     // Serial.println(ballLocal.y);
+  
+
+
+// //   // Keeper Logik (optional)
+// //   // keeper(Player, ballLocal);
+
+// //   // 3. Ziel berechnen & PID anwenden
+//   Vec2 v = computeBehindBallTarget(ballLocal.x, ballLocal.y);
+//   float finalbvx = pidx.update(v.x);
+//   float finalbvy = pidy.update(v.y);
+//   Vec2 ballVec = { finalbvx, finalbvy };
+
+// //   // 4. Feldgrenzen anwenden
+//  applyFieldBounds(ballVec, p_x, p_y, kBounds, ballLocal, kExtras);
+
+//   finaldrivex = ballVec.x;
+//   finaldrivey = ballVec.y;
+
+// //   // Timeout Safety
+//   uint32_t nowMs = millis();
+//   if (!got_cmd || (nowMs - last_cmd_ms) > CMD_TIMEOUT_MS) {
+//     got_cmd = false;
+//     // Rückkehr zur Mitte wenn Ball verloren? 
+//     // Vorsichtig: -p_x * 2 ist sehr aggressiv! Lieber stehen bleiben oder sanft bremsen.
+//     finaldrivex = 0; 
+//     finaldrivey = 0;
+//   }
+// float finalpx = pidx.update(p_x);
+// float finalpy = pidy.update(p_y);
+//   // 5. Fahren
+//   //Drive.calcDrive(-finaldrivex, finaldrivey, -pdg);
+//   Drive.calcDrive(-finalpx,finalpy,-pdg);
+//     Drive.drive();
 }

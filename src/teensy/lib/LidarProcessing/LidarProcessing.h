@@ -5,75 +5,27 @@
 #include <vector>
 #include "LD19.h"
 
-extern LD19 lidarsensor;
-
-
-
-// --- Feldgrößen als Makros (in mm) ---
+// --- Feldgrößen (in mm) ---
+// RoboCup Junior Soccer Open Field 
 #define FIELD_X_MM 1820
 #define FIELD_Y_MM 2430
 
-// Umrechnung in cm
-#define FIELD_X_CM (FIELD_X_MM / 10)
-#define FIELD_Y_CM (FIELD_Y_MM / 10)
-
-// --- LiDAR-Konstanten ---
-#ifndef POINTCLOUD_SIZE
-  #define POINTCLOUD_SIZE 600
-#endif
-
-
-
 // --- Strukturen ---
+
+// Fix für redefinition of struct Vec2
+#ifndef SAFETY_VEC2_DEFINED
+#define SAFETY_VEC2_DEFINED 1
 struct Vec2 {
   float x;
   float y;
 };
-
-#ifndef SAFETY_VEC2_DEFINED
-#define SAFETY_VEC2_DEFINED 1
 #endif
 
-struct Vec2E {
-  float x;
-  float y;
-  float probability;
-};
+// Externe Globals
+extern Vec2 Player; // Roboterposition in mm (0,0 = Mitte)
 
-// Roboterposition (mm)
-extern Vec2 Player;
-
-// LiDAR-Punkts (alle Maße in mm)
-struct LidarPoint {
-  int distance;    // Entfernung (mm)
-  int intensity;
-  int age;
-  int x;           // x-Koordinate
-  int y;           // y-Koordinate
-  int status;
-};
-
-
-
-// Array mit 360 LiDAR-Punkten
-extern LidarPoint points360[360];
-
-// --- LiDAR-Funktionen ---
-Vec2 Vec2EToVec2(const Vec2E &vec);
-bool IsPointInCircle(Vec2 point, Vec2 center, float radius);
-
-void resetPoint(int i);
-void countCycle();
-void filterPoints();
-void resetSimilarPoints();
-// void clusterPoints(); // Removed/Integrated
-// void setBotX(); // Removed
-// void setBotY(); // Removed
-// void calculateBotPos(); // Removed
-void clusterForPos();
-void lidaar();
+// --- Funktionen ---
 void LidarBegin();
-
-
+void lidaar(); // Hauptschleife
 
 #endif
