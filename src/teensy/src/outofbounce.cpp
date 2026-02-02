@@ -1,18 +1,17 @@
 #include "outofbounce.h"
-#include <algorithm> 
+#include <algorithm>
 #include <math.h>
 
-// Kleine Hilfsfunktionen für sauberen Code
-static inline float sgn(float val) {
-  if (val > 0.0f) return 1.0f;
-  if (val < 0.0f) return -1.0f;
-  return 0.0f;
+static inline float sgn(float v) { return (v > 0.0f) - (v < 0.0f); }
+
+static inline float clampf(float v, float lo, float hi) {
+  return (v < lo) ? lo : (v > hi) ? hi : v;
 }
 
-static inline float clampf(float val, float minVal, float maxVal) {
-  if (val < minVal) return minVal;
-  if (val > maxVal) return maxVal;
-  return val;
+// 0..1 smoothstep, continuous slope at ends
+static inline float smooth01(float x) {
+  x = clampf(x, 0.0f, 1.0f);
+  return x * x * (3.0f - 2.0f * x);
 }
 
 void applyFieldBounds(Vec2& cmd,
@@ -21,89 +20,86 @@ void applyFieldBounds(Vec2& cmd,
                       const Vec2& ballLocal,
                       const BoundsExtras& extras)
 {
-  // ----------------------------------------------------------
-  // 1. Escape-Logik (bleibt wie gehabt)
-  // ----------------------------------------------------------
+  // ---- config sanity ----
+  float softM = cfg.softMargin;
+  float hardM = cfg.hardMargin;
+  if (softM < 1.0f) softM = 1.0f;
+  if (hardM < 0.0f) hardM = 0.0f;
+  if (hardM > softM - 0.5f) hardM = softM - 0.5f;
+
+  // ---- Escape-Heuristik: lockert nur Soft-Zone, nie deaktivieren ----
   bool escapeX = false;
   bool escapeY = false;
 
   if (extras.enableDirectionalEscape) {
-    // Wenn Ball deutlich in der anderen Hälfte liegt -> Y-Grenze lockern
-    if ( (py > 0.0f && ballLocal.y < -extras.yEscapeThresh) ||
-         (py < 0.0f && ballLocal.y >  +extras.yEscapeThresh) ) {
+    if ((py > 0.0f && ballLocal.y < -extras.yEscapeThresh) ||
+        (py < 0.0f && ballLocal.y > +extras.yEscapeThresh)) {
       escapeY = true;
     }
-    // Wenn Ball deutlich auf der anderen Seite liegt -> X-Grenze lockern
-    if ( (px >  (cfg.xLimit - cfg.softMargin) && ballLocal.x < -extras.xEscapeThresh) ||
-         (px < -(cfg.xLimit - cfg.softMargin) && ballLocal.x >  +extras.xEscapeThresh) ) {
+    if ((px >  (cfg.xLimit - softM) && ballLocal.x < -extras.xEscapeThresh) ||
+        (px < -(cfg.xLimit - softM) && ballLocal.x > +extras.xEscapeThresh)) {
       escapeX = true;
     }
   }
 
-  // ----------------------------------------------------------
-  // 2. Fluide Begrenzungs-Logik (Proportional + Exponentiell)
-  // ----------------------------------------------------------
-  
-  auto applyAxisPhysics = [&](float &velCmd, float pos, float limit, bool isEscape) {
-      float absPos = fabsf(pos);
-      float signPos = sgn(pos);
-      
-      // Zonen-Definition
-      float startSoft = limit - cfg.softMargin; // Hier beginnt das Bremsen
-      float startHard = limit - cfg.hardMargin; // Hier ist Schluss (Wand)
+  auto applyAxis = [&](float &vCmd, float pos, float limit, bool isEscape) {
+    const float absPos  = fabsf(pos);
+    const float signPos = sgn(pos);
 
-      // Wenn wir noch weit weg sind oder "Escape" aktiv ist -> Abbruch
-      if (absPos < startSoft || isEscape) return;
+    // distance to wall (cm): d>0 inside, d=0 at line, d<0 outside
+    const float d = limit - absPos;
 
-      // Prüfen, ob der Roboter versucht, RAUS zu fahren
-      // (Geschwindigkeit hat gleiches Vorzeichen wie Position)
-      bool movingOut = (velCmd * signPos > 0.0f);
+    // Outside Panic: erzwinge Rückkehr nach innen
+    if (d < -extras.outsidePanicCm) {
+      if (vCmd * signPos > 0.0f) vCmd = 0.0f;       // outward kill
+      const float minIn = cfg.maxHard;              // min return speed
+      if (vCmd * signPos > -minIn) vCmd = -signPos * minIn;
+      return;
+    }
 
-      // --- A: Soft Zone (Progressives Bremsen) ---
-      if (movingOut) {
-          float zoneWidth = cfg.softMargin - cfg.hardMargin;
-          if (zoneWidth < 0.001f) zoneWidth = 0.001f; // Div/0 Schutz
+    // Soft-Margin ggf. lockern (Escape), aber Hard bleibt hard
+    float softEff = softM;
+    if (isEscape) {
+      softEff = std::max(hardM + extras.minSoftHardGap, softM * extras.escapeSoftFactor);
+    }
 
-          float penetration = (absPos - startSoft) / zoneWidth;
-          penetration = clampf(penetration, 0.0f, 1.0f);
+    const float startSoft = limit - softEff;
+    const float startHard = limit - hardM;
 
-          // Die maximal erlaubte Geschwindigkeit sinkt linear
-          float currentLimit = (1.0f - penetration) * cfg.maxSoft;
+    if (absPos < startSoft) return;
 
-          // Drosseln, falls zu schnell
-          if (fabsf(velCmd) > currentLimit) {
-              velCmd = signPos * currentLimit;
-          }
-      }
+    const bool movingOut = (vCmd * signPos > 0.0f);
 
-      // --- B: Hard Zone (Exponenzieller Rückstoß) ---
-      // Wenn wir über die Linie rutschen, drückt uns eine "Feder" zurück.
-      if (absPos > startHard) {
-          float deep = absPos - startHard; // Eindringtiefe in cm
-          
-          // Exponenzieller Rückstoß: F = k * (e^x - 1)
-          // Das fühlt sich bei kleiner Tiefe weich an (x ~= e^x-1) und wird dann brutal hart.
-          // Mit kPush = 1.0 hat man bei 4cm Eindringtiefe schon Max-Power.
-          float pushForce = cfg.kPush * (expf(deep) - 1.0f);
-          
-          // Begrenzung der Rückstoßkraft (gegen Oszillation und Übersteuern)
-          pushForce = clampf(pushForce, 0.0f, cfg.maxHard);
+    // Soft-Zone: outward-Komponente progressiv dämpfen
+    if (movingOut) {
+      // x=1 bei Soft-Start, x=0 bei Hard-Start
+      const float x = (startHard - absPos) / (startHard - startSoft);
+      const float s = smooth01(x);
 
-          // Kraft wirkt immer nach INNEN (entgegen der Position)
-          velCmd -= signPos * pushForce;
-      }
+      // Quadratisch -> weniger Limit-Cycle
+      const float vOutMax = cfg.maxSoft * (s * s);
+      const float vAbs = fabsf(vCmd);
+      if (vAbs > vOutMax) vCmd = signPos * vOutMax;
+    }
+
+    // Hard-Zone: definierter Push nach innen
+    if (absPos > startHard) {
+      const float pen = clampf(absPos - startHard, 0.0f, hardM + extras.outsidePanicCm);
+      float push = cfg.kPush * pen * pen;          // stabiler Ramp, kein exp()
+      push = clampf(push, 0.0f, cfg.maxHard);
+      vCmd -= signPos * push;
+    }
   };
 
-  // Physik auf beide Achsen anwenden
-  applyAxisPhysics(cmd.x, px, cfg.xLimit, escapeX);
-  applyAxisPhysics(cmd.y, py, cfg.yLimit, escapeY);
-  
-  // (Optional) Vektor-Limitierung
-  float vSq = cmd.x*cmd.x + cmd.y*cmd.y;
-  float absoluteMax = cfg.maxHard * 1.41f + 10.0f; // Toleranz
-  if (vSq > absoluteMax * absoluteMax) {
-      float scale = absoluteMax / sqrtf(vSq);
-      cmd.x *= scale;
-      cmd.y *= scale;
+  applyAxis(cmd.x, px, cfg.xLimit, escapeX);
+  applyAxis(cmd.y, py, cfg.yLimit, escapeY);
+
+  // Globaler Vektor-Limit (verhindert Diagonal-Übertreibung nach Push)
+  const float vSq = cmd.x * cmd.x + cmd.y * cmd.y;
+  const float absMax = std::max(cfg.maxSoft, cfg.maxHard) * 1.45f;
+  if (vSq > absMax * absMax) {
+    const float scale = absMax / sqrtf(vSq);
+    cmd.x *= scale;
+    cmd.y *= scale;
   }
 }

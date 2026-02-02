@@ -88,7 +88,7 @@ def run_camera(config, stop_event, frame_ready_event):
             frame_ready_event.set()
             
             # Optional: yield slightly to prevent CPU hogging
-            # time.sleep(0.0001)
+            time.sleep(0.0001)
 
     except Exception as e:
         print(f"[CAM] Error during loop: {e}")

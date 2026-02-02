@@ -18,14 +18,14 @@ namespace {
 
 // setMotor: Steuert einen einzelnen Motor (Richtung und PWM) anhand des Speed-Werts
 void DriveSystem::setMotor(int pinA, int pinB, int pinPWM, int speed) {
-  const int HOLD_PWM = 26;           // hält Treiber „wach“ (wie bei dir)
-  int pwm = abs(speed);
+  const int HOLD_PWM = 39;           // hält Treiber „wach“ (wie bei dir)
+  int pwm = speed;
 
   if (pwm == 0) {
     // neutral / leichter Hold
-    digitalWrite(pinA, HIGH);
-    digitalWrite(pinB, LOW);
-    analogWrite(pinPWM, HOLD_PWM);
+     digitalWrite(pinB, HIGH);
+    // digitalWrite(pinB, HIGH);
+    analogWrite(pinPWM,50 );
     return;
   }
 
@@ -33,7 +33,6 @@ void DriveSystem::setMotor(int pinA, int pinB, int pinPWM, int speed) {
   if (pwm < minSpeed) pwm = minSpeed;
 
   if (speed > 0) {
-    digitalWrite(pinA, LOW);
     digitalWrite(pinB, HIGH);
     analogWrite(pinPWM, pwm);
   } else {

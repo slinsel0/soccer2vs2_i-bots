@@ -1,8 +1,8 @@
 {
     "camera": {
         "camera_index": 0,
-        "width": 640,
-        "height": 640,
+        "width": 1456,
+        "height": 1088,
         "fps": 30,
         "exposure_us": 15000,
         "iso": 800,

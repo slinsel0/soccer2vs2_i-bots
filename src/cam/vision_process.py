@@ -118,8 +118,8 @@ def run_vision(config, stop_event, frame_ready_event, result_queue):
                     cy = M['m01'] / M['m00']
                     res_dist, res_angle = geo.pixel_to_polar(cx, cy)
                     found = True
-                    print(f"[VIS] Ball gefunden: D={res_dist:.2f}px, A={res_angle:.2f}°")
-                    print(cx, cy)
+                    #print(f"[VIS] Ball gefunden: D={res_dist:.2f}px, A={res_angle:.2f}°")
+                    #print(cx, cy)
                     
                     payload = {
                         'found': True, 'cx': cx, 'cy': cy,
