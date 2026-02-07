@@ -64,11 +64,13 @@ DriveSystem Drive;
 
 // -------------------- PID / Tuning --------------------
 // Heading PID: timeStepMs MUSS zur IMU-Rate passen (BNO08x 100Hz -> 10ms)
-PIDController pidHeading(6.5f, 0.001f, 0.10f, 10, 25.0f);
+PIDController pidHeading(5.5f, 0.001f, 0.08f, 10, 25.0f);
 
 // Center Hold (Pose in mm!)
-PIDController pidCenterX(0.0008f, 0.0f, 0.0f, 20, 200.0f);
-PIDController pidCenterY(0.0008f, 0.0f, 0.0f, 20, 200.0f);
+// Center Hold (Pose in mm!)
+// Kp = 0.5f -> 100mm error => 50 output (gut bewegbar in DriveSystem Skalierung)
+PIDController pidCenterX(0.5f, 0.0f, 0.0f, 20, 200.0f);
+PIDController pidCenterY(0.5f, 0.0f, 0.0f, 20, 200.0f);
 
 // Ball Control (Ball in Pixel / local units)
 PIDController pidBallX(0.6f, 0.01f, 0.2f, 20, 100.0f);
@@ -76,8 +78,8 @@ PIDController pidBallY(0.6f, 0.01f, 0.2f, 20, 100.0f);
 
 // -------------------- Bounds --------------------
 static const BoundsConfig kBounds = {
-  /* xLimit      */ 85.0f,
-  /* yLimit      */ 115.0f,
+  /* xLimit      */ 80.0f,  // Erhöht von 70.0 (mehr Spielfeld)
+  /* yLimit      */ 110.0f, // Erhöht von 90.0 (mehr Spielfeld)
   /* softMargin  */ 20.0f,
   /* hardMargin  */ 10.0f,
   /* kPush       */ 1.5f,
@@ -87,9 +89,9 @@ static const BoundsConfig kBounds = {
 
 // Escape im bisherigen Setup NICHT aktivieren, solange ballLocal nicht in cm ist.
 static const BoundsExtras kExtras = {
-  /* yEscapeThresh           */ 20.0f,
-  /* xEscapeThresh           */ 30.0f,
-  /* enableDirectionalEscape */ false
+  /* yEscapeThresh           */ 200.0f,
+  /* xEscapeThresh           */ 200.0f,
+  /* enableDirectionalEscape */ false 
 };
 
 // -------------------- State --------------------
@@ -123,14 +125,14 @@ static Vec2 computeBehindBallTargetPx(float ballX, float ballY) {
   Vec2 offset = {0.0f, 0.0f};
 
   if (ballY > 0.0f) {
-    if (fabsf(ballX) < 10.0f) {
+    if (fabsf(ballX) < 100.0f) {
       offset.x = 0.0f; offset.y = 0.0f;
     } else {
-      offset.y = 80.0f;
+      offset.y = 800.0f;
     }
   } else {
-    offset.x = (ballX < 0.0f) ? -50.0f : 50.0f;
-    offset.y = 75.0f;
+    offset.x = (ballX < 0.0f) ? -500.0f : 500.0f;
+    offset.y = 750.0f;
   }
   return { ballX - offset.x, ballY - offset.y };
 }
@@ -199,6 +201,7 @@ void loop() {
   ctx.ball_valid = commFresh;
   ctx.ball_raw_x = last_vx;
   ctx.ball_raw_y = last_vy;
+  
 
   // Health (hier erstmal "true"; später sauber über last-update timestamps)
   ctx.imu_ok = true;
@@ -225,22 +228,33 @@ void loop() {
 
     if (st == RobotState::CHASE_BALL && ctx.ball_valid) {
       // Ball lokal in Pixel: center offset (deine bisherigen Werte)
-      const float bx = ctx.ball_raw_x - 284.0f;
-      const float by = ctx.ball_raw_y - 325.0f;
+      const float bx = ctx.ball_raw_x - 700.0f;
+      const float by = ctx.ball_raw_y - 400.0f;
 
-      Vec2 target = computeBehindBallTargetPx(bx, by);
+      // Serial.print("Ball: ");
+      // Serial.print(bx);
+      // Serial.print(" ");
+      // Serial.println(by);
 
-      v_cmd.x = pidBallX.update(target.x);
-      v_cmd.y = pidBallY.update(target.y);
+      //Vec2 target = computeBehindBallTargetPx(bx, by);
+
+      v_cmd.x = pidBallX.update(bx);
+      v_cmd.y = pidBallY.update(by);
     }
-    else if (st == RobotState::RECOVER_BOUNDS) {
+    else if (st == RobotState::RECOVER_BOUNDS || st == RobotState::RETURN_CENTER) {
       // sanft Richtung Mitte (Pose in mm)
-      v_cmd.x = pidCenterX.update(-ctx.px_mm);
-      v_cmd.y = pidCenterY.update(-ctx.py_mm);
-    }
-    else if (st == RobotState::RETURN_CENTER) {
-      v_cmd.x = pidCenterX.update(-ctx.px_mm);
-      v_cmd.y = pidCenterY.update(-ctx.py_mm);
+      // PID rechnet in Feldkoordinaten (Fehler = Mitte - Ist = -ctx.px_mm)
+      float v_field_x = pidCenterX.update(-ctx.px_mm);
+      float v_field_y = pidCenterY.update(-ctx.py_mm);
+
+      // In Roboter-Koordinaten rotieren (da DriveSystem v_robot erwartet)
+      // theta = -heading (weil wir Feld -> Bot wollen, und Heading Bot->Feld ist)
+      float theta = -ctx.heading_deg * (M_PI / 180.0f);
+      float c = cosf(theta);
+      float s = sinf(theta);
+
+      v_cmd.x = v_field_x * c - v_field_y * s;
+      v_cmd.y = v_field_x * s + v_field_y * c;
     }
     else {
       v_cmd = bc.v; // IDLE/SEARCH/FAILSAFE default
@@ -249,7 +263,7 @@ void loop() {
     // --- Apply field bounds (units in cm!) ---
     // ballLocal ist hier NICHT cm -> Escape deaktiviert. Übergib 0.
     Vec2 dummyBallLocalCm = {0.0f, 0.0f};
-    applyFieldBounds(v_cmd, ctx.px_cm, ctx.py_cm, kBounds, dummyBallLocalCm, kExtras);
+    //applyFieldBounds(v_cmd, ctx.px_cm, ctx.py_cm, kBounds, dummyBallLocalCm, kExtras);
 
     // --- Omega / Heading ---
     float omega_cmd = 0.0f;
@@ -259,7 +273,7 @@ void loop() {
 
     // 5) Drive
     Drive.calcDrive(-v_cmd.x, v_cmd.y, -omega_cmd);
-Drive.drive();  
+Drive .drive();  
   }
 
   // 6) Telemetry (clean, rate-limited)

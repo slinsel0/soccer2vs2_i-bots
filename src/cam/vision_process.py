@@ -104,7 +104,7 @@ def run_vision(config, stop_event, frame_ready_event, result_queue):
                 if perimeter == 0: continue
                 circularity = 4 * np.pi * (area / (perimeter * perimeter))
                 
-                if circularity < 0.6: 
+                if circularity < c_vis.get('min_circularity', 0.6): 
                     continue
 
                 if area > max_score:

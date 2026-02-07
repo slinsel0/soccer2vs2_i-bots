@@ -71,11 +71,11 @@ public:
   float getDeadband() const { return deadband; }
   int   getSlewPerCycle() const { return slewPerCycle; }
 
-void setMotor(int pinA, int pinB, int pinPWM, int speed);
 
 
 private:
   // Interne Motor-Ansteuerung (Richtung + PWM)
+void setMotor(int pinA, int pinB, int pinPWM, int speed);
 
   // Matrix nach Winkel-/Radius-Änderungen neu aufbauen
   void rebuildMatrix();
@@ -92,13 +92,13 @@ private:
   float rot_to_lin = 0.18f;   // [m] Roboter-"Radius" zur Drehachse
 
   // Deadband in "v"-Einheiten
-  float deadband = 0.61f;
+  float deadband = 1.0f;
 
   // max. PWM-Schritt pro drive()-Aufruf
-  int   slewPerCycle = 5;
+  int   slewPerCycle = 15;
 
   // Mindest-PWM (um Haftreibung sicher zu überwinden)
-  int   minSpeed = 26;
+  int   minSpeed = 25;
 
   // Maximaler "v"-Wert (Bezug für L∞-Skalierung + Mapping)
   float maxSpeed = 150.0f;

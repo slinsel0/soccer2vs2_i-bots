@@ -25,7 +25,7 @@
             "v_max": 255,
             "min_area_px": 5,
             "max_area_px": 5000,
-            "merge_distance": 5
+            "min_circularity": 0.1
         }
     },
     "serial": {

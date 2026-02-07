@@ -9,10 +9,12 @@ RUN apt-get update && apt-get install -y \
     udev \
     git \
     wget \
+    python3-tk \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. PlatformIO Core installieren
-RUN pip install -U platformio
+
+# 2. PlatformIO Core, matplotlib und pyserial installieren
+RUN pip install -U platformio matplotlib pyserial
 
 # 3. Teensy Loader CLI von Source kompilieren
 WORKDIR /tmp

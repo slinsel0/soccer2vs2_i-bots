@@ -1,6 +1,6 @@
 #!/bin/bash
-# Gehe sicher, dass wir im richtigen Ordner sind
-cd src/teensy
+# Gehe sicher, dass wir im Ordner des Skripts sind (src/teensy)
+cd "$(dirname "$0")"
 
 echo "Baue Image (falls nötig)..."
 # Wir bauen das Image nur neu, wenn sich das Dockerfile oder die platformio.ini ändert

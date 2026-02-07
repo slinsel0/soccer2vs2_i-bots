@@ -11,12 +11,13 @@ GyroSystem::GyroSystem()
 
 void GyroSystem::begin()
 {
-    // BNO08x mit Standard-I2C-Adresse starten
-    if (!bno08x.begin_I2C())
+    // BNO08x mit Standard-I2C-Adresse auf Wire1 starten
+    // Wire1: SDA1 (Pin 17), SCL1 (Pin 16)
+    if (!bno08x.begin_I2C(BNO08x_I2CADDR_DEFAULT, &Wire1))
     {
         Serial.println("Fehler: BNO08x nicht gefunden!");
         while (true) {
-            if (bno08x.begin_I2C()) break;
+            if (bno08x.begin_I2C(BNO08x_I2CADDR_DEFAULT, &Wire1)) break;
             Serial.println("Suche BNO08x...");
             delay(1000);
          }

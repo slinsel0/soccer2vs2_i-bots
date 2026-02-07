@@ -12,8 +12,8 @@
 #define LIDAR_MOUNT_OFFSET_Y 0.0f 
 
 // Glättungsfaktor (0.01 = sehr träge/glatt, 1.0 = kein Filter)
-// Vorher 0.3 -> Jetzt 0.1 für mehr Ruhe im Stillstand
-#define FILTER_ALPHA 0.1f 
+// Vorher 0.3 -> Jetzt 0.08 für mehr Ruhe im Stillstand
+#define FILTER_ALPHA 0.08f 
 
 // --- Globale Variablen ---
 Vec2 Player = {0.0f, 0.0f}; // Startposition Mitte (in mm)
@@ -27,8 +27,8 @@ static float lastValidX = 0.0f;
 static float lastValidY = 0.0f;
 
 // Konstanten für Filterung
-const int   MIN_POINTS_FOR_WALL = 3; // Mindestens X Punkte für eine gültige Wand
-const float WALL_WINDOW_CM = 40.0f; // Etwas größer tolerieren (40cm)
+const int   MIN_POINTS_FOR_WALL = 25; // Mindestens X Punkte für eine gültige Wand
+const float WALL_WINDOW_CM = 15.0f; // Etwas enger tolerieren (15cm) für weniger Noise
 
 void LidarBegin() {
   lidarsensor.begin(&Serial1);
