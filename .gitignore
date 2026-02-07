@@ -1,2 +1,4 @@
 .venv
-__pycache__
+/src/cam/__pycache__
+/src/cam/core.9
+/src/cam/core.8

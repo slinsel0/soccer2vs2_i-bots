@@ -8,9 +8,9 @@ import libcamera # Für libcamera.Transform
 CONFIG_PATH = 'ball_tracker_config.json'
 
 # Kameraeinstellungen
-WIDTH = 640 
-HEIGHT = 480
-EXPOSURE_TIME_US = 30000
+WIDTH = 1456 
+HEIGHT = 1088
+EXPOSURE_TIME_US = 15000
 CAMERA_INDEX = 0
 
 # Globale Variablen für ROI-Auswahl
@@ -21,13 +21,13 @@ current_frame_for_roi = None # Wird in der Schleife aktualisiert
 
 def load_config(path):
     default_params = {
-        "h_lower": 10, "s_lower": 150, "v_lower": 150,
-        "h_upper": 30, "s_upper": 255, "v_upper": 255,
+        "h_lower": 0, "s_lower": 150, "v_lower": 100,
+        "h_upper": 15, "s_upper": 255, "v_upper": 255,
         "erode_iter": 1, "dilate_iter": 1,
         "kernel_size": 3,
-        "min_blob_area": 100, "max_blob_area": 10000,
+        "min_blob_area": 5, "max_blob_area": 5000,
         "min_circularity": 0.6, "min_convexity": 0.8, "min_inertia_ratio": 0.4,
-        "minDistBetweenBlobs": 10, "minThreshold": 10,
+        "minDistBetweenBlobs": 5, "minThreshold": 10,
         "maxThreshold": 200, "thresholdStep": 10
     }
     try:
