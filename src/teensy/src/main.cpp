@@ -30,7 +30,7 @@ PIDController pidy(2.5f, 0.0f, 0.0f, 0.0f, 0.0f);
 // --- GRENZEN ---
 static const BoundsConfig kBounds = {
   /* xLimit      */ 85.0f,    // (Optional) Etwas näher an die echte Wand (90), wenn sicher
-  /* yLimit      */ 115.0f,   // (Optional) Etwas näher an die echte Wand (120)
+  /* yLimit      */ 80.0f,   // (Optional) Etwas näher an die echte Wand (120)
   
   /* softMargin  */ 20.0f,    // VORHER: 35.0f -> Jetzt bremst er erst 20cm vor der Grenze
   /* hardMargin  */ 10.0f,    // Sicherheitsabstand
@@ -95,21 +95,20 @@ static Vec2 computeBehindBallTarget(float ballX, float ballY) {
   Vec2 offset = {0.0f, 0.0f};
   // Einfache Logik: Hinter den Ball fahren
   if (ballY > 0.0f) {
-    if (fabsf(ballX) < 10.0f) {
+    if (fabsf(ballX) < 100.0f) {
       offset.x = 0.0f; offset.y = 0.0f;
     } else {
-      offset.y = 80.0f;
+      offset.y = 800.0f;
     }
   } else {
-    offset.x = (ballX < 0.0f) ? -50.0f : 50.0f;
-    offset.y = 75.0f;
+    offset.x = (ballX < 0.0f) ? -500.0f : 500.0f;
+    offset.y = 750.0f;
   }
   return { ballX - offset.x, ballY - offset.y };
 }
 
 void setup() {
   gyro.begin(); // IMUPLUS Mode beachten (siehe vorherige Antwort)
-  pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(2000000);
   cobsSerial.setStream(&Serial);
   cobsSerial.setPacketHandler(&onPacketReceived);
@@ -123,17 +122,26 @@ void loop() {
   gyro.update();
   
   g_a = gyro.getAngleDegrees();
-  p_x = Player.x;
-  p_y = Player.y;
+  p_x = Player.x*0.1;
+  p_y = Player.y*0.1;
 
   // 1. Rotation berechnen (Heading halten 0°)
   float pdg = pidg.update(g_a);
 
   // 2. Ball Position holen
-  Vec2 ballLocal = { last_vx, last_vy };
+  Vec2 ballLocal = { last_vx-700, last_vy-400 };
 
-  Serial.println(last_vx);
-  Serial.println(last_vy);
+  // Serial.println(last_vx);
+  // Serial.println(last_vy);
+
+    Serial.print(">p_x:");
+    Serial.println(p_x);
+    Serial.print(">p_y:");
+    Serial.println(p_y);
+
+  
+
+  
   //ballLocal.x += 25; // Kamera Offset?
 
   // Keeper Logik (optional)
@@ -143,7 +151,7 @@ void loop() {
   Vec2 v = computeBehindBallTarget(ballLocal.x, ballLocal.y);
   float finalbvx = pidx.update(v.x);
   float finalbvy = pidy.update(v.y);
-  Vec2 ballVec = { finalbvx, finalbvy };
+  Vec2 ballVec = { 0, 30 };
 
   // 4. Feldgrenzen anwenden
   applyFieldBounds(ballVec, p_x, p_y, kBounds, ballLocal, kExtras);
@@ -152,16 +160,16 @@ void loop() {
   finaldrivey = ballVec.y;
 
   // Timeout Safety
-  uint32_t nowMs = millis();
-  if (!got_cmd || (nowMs - last_cmd_ms) > CMD_TIMEOUT_MS) {
-    got_cmd = false;
-    // Rückkehr zur Mitte wenn Ball verloren? 
-    // Vorsichtig: -p_x * 2 ist sehr aggressiv! Lieber stehen bleiben oder sanft bremsen.
-    finaldrivex = p_x * 2; 
-    finaldrivey = -p_y * 2;
-  }
+  // uint32_t nowMs = millis();
+  // if (!got_cmd || (nowMs - last_cmd_ms) > CMD_TIMEOUT_MS) {
+  //   got_cmd = false;
+  //   // Rückkehr zur Mitte wenn Ball verloren? 
+  //   // Vorsichtig: -p_x * 2 ist sehr aggressiv! Lieber stehen bleiben oder sanft bremsen.
+  //   finaldrivex = p_x*0.5f; 
+  //   finaldrivey = p_y*0.5f ;
+  // }
 
-  // 5. Fahren
-  Drive.calcDrive(-finaldrivex, -finaldrivey, -pdg);
-  // Drive.drive();
+  // 5. Fahrens
+  Drive.calcDrive(finaldrivex,-finaldrivey, -pdg);
+  Drive.drive();
 }

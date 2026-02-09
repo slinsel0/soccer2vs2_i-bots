@@ -19,7 +19,7 @@ void GyroSystem::begin()
         while (true) {
             if (bno08x.begin_I2C(BNO08x_I2CADDR_DEFAULT, &Wire1)) break;
             Serial.println("Suche BNO08x...");
-            delay(1000);
+            delay(100);
          }
     }
 
