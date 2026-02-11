@@ -1,109 +1,126 @@
+/*  ═══════════════════════════════════════════════════════════════════════
+ *  AXIS-LOCK  +  PULL-TO-LINE  +  TOR-ZONEN
+ *  ═══════════════════════════════════════════════════════════════════════
+ *
+ *  X-Achse:  safeLine ist immer gleich (Seitenwände)
+ *
+ *  Y-Achse:  safeLine hängt von der X-Position ab!
+ *
+ *    Bot steht seitlich (|x| > 30)?
+ *      → Vor ihm ist WAND  → safeLine_Y = yLimit − safeMarginY     (weit)
+ *
+ *    Bot steht mittig (|x| ≤ 30)?
+ *      → Vor ihm ist TOR   → safeLine_Y = yLimit − goalSafeMarginY (eng!)
+ *
+ *
+ *                   Wand   Tor(60cm)   Wand
+ *     Y-Limit ──── ██████ ┃        ┃ ██████
+ *                         ┃  GOAL  ┃
+ *     safeLine(goal)------┃--------┃------    ← enger!
+ *                         ┃        ┃
+ *     safeLine(wall)------██████████████------  ← normaler Abstand
+ *                              ↑
+ *                        goalHalfWidth
+ *
+ *
+ *  Axis-Lock + Escape (pro Achse, unverändert):
+ *    |pos| < safeLine?                  → Frei, kein Eingriff
+ *    |pos| ≥ safeLine + cmd outward?    → LOCK: cmd = Pull
+ *    |pos| ≥ safeLine + cmd inward?     → ESCAPE: cmd bleibt + Pull
+ *
+ *  ═══════════════════════════════════════════════════════════════════════ */
+
 #include "outofbounce.h"
-#include <algorithm> 
 #include <math.h>
 
-// Kleine Hilfsfunktionen für sauberen Code
-static inline float sgn(float val) {
-  if (val > 0.0f) return 1.0f;
-  if (val < 0.0f) return -1.0f;
-  return 0.0f;
-}
+// ─────────────────── Hilfsfunktionen ───────────────────────────
 
-static inline float clampf(float val, float minVal, float maxVal) {
-  if (val < minVal) return minVal;
-  if (val > maxVal) return maxVal;
+static inline float clampf(float val, float lo, float hi) {
+  if (val < lo) return lo;
+  if (val > hi) return hi;
   return val;
 }
 
+// ═══════════════════════════════════════════════════════════════
+
 void applyFieldBounds(Vec2& cmd,
                       float px, float py,
-                      const BoundsConfig& cfg,
-                      const Vec2& ballLocal,
-                      const BoundsExtras& extras)
+                      const BoundsConfig& cfg)
 {
-  // ----------------------------------------------------------
-  // 1. Escape-Logik (bleibt wie gehabt)
-  // ----------------------------------------------------------
-  bool escapeX = false;
-  bool escapeY = false;
+  // ── Generische Achsen-Funktion (Lock + Pull + Escape) ─────
+  //    safeLine wird von aussen übergeben (pro Achse unterschiedlich)
 
-  if (extras.enableDirectionalEscape) {
-    // Wenn Ball deutlich in der anderen Hälfte liegt -> Y-Grenze lockern
-    if ( (py > 0.0f && ballLocal.y < -extras.yEscapeThresh) ||
-         (py < 0.0f && ballLocal.y >  +extras.yEscapeThresh) ) {
-      escapeY = true;
+  auto processAxis = [&](float &velCmd, float pos, float safeLine) {
+
+    float absPos  = fabsf(pos);
+
+    // Innerhalb der safeLine? → Nichts tun
+    if (absPos <= safeLine) return;
+
+    // ── Ausserhalb: Pull + Lock/Escape ──────────────────────
+    float overshoot = absPos - safeLine;
+    float signPos   = (pos >= 0.0f) ? 1.0f : -1.0f;
+
+    // Pull-Kraft → immer Richtung safeLine (nach innen)
+    //   pos=+80 → signPos=+1 → pullVel=+pullSpeed → zieht zur Mitte ✓
+    //   (Vorzeichen passend zu eurem Drive-System wo cmd=+pos → zur Mitte)
+    float pullSpeed = cfg.kPull * overshoot;
+    pullSpeed = clampf(pullSpeed, 0.0f, cfg.maxPull);
+    float pullVel = signPos * pullSpeed;
+
+    // Fahrvektor zeigt nach AUSSEN?
+    //   In eurem System: cmd gleiche Richtung wie pos = Richtung Mitte (inward)
+    //   Also outward = cmd hat ANDERES Vorzeichen als pos
+    bool wantsOutward = (velCmd * signPos) < 0.0f;
+
+    if (wantsOutward) {
+      // LOCK: Outward-Befehl komplett ersetzen durch Pull
+      velCmd = pullVel;
+    } else {
+      // ESCAPE: Inward-Befehl bleibt + Pull addiert (Boost)
+      velCmd += pullVel;
     }
-    // Wenn Ball deutlich auf der anderen Seite liegt -> X-Grenze lockern
-    if ( (px >  (cfg.xLimit - cfg.softMargin) && ballLocal.x < -extras.xEscapeThresh) ||
-         (px < -(cfg.xLimit - cfg.softMargin) && ballLocal.x >  +extras.xEscapeThresh) ) {
-      escapeX = true;
-    }
-  }
-
-  // ----------------------------------------------------------
-  // 2. Fluide Begrenzungs-Logik (Proportional + Exponentiell)
-  // ----------------------------------------------------------
-  
-  auto applyAxisPhysics = [&](float &velCmd, float pos, float limit, bool isEscape) {
-      float absPos = fabsf(pos);
-      float signPos = sgn(pos);
-      
-      // Zonen-Definition
-      float startSoft = limit - cfg.softMargin; // Hier beginnt das Bremsen
-      float startHard = limit - cfg.hardMargin; // Hier ist Schluss (Wand)
-
-      // Wenn wir noch weit weg sind oder "Escape" aktiv ist -> Abbruch
-      if (absPos < startSoft || isEscape) return;
-
-      // Prüfen, ob der Roboter versucht, RAUS zu fahren
-      // (Geschwindigkeit hat gleiches Vorzeichen wie Position)
-      bool movingOut = (velCmd * signPos > 0.0f);
-
-      // --- A: Soft Zone (Progressives Bremsen) ---
-      if (movingOut) {
-          float zoneWidth = cfg.softMargin - cfg.hardMargin;
-          if (zoneWidth < 0.001f) zoneWidth = 0.001f; // Div/0 Schutz
-
-          float penetration = (absPos - startSoft) / zoneWidth;
-          penetration = clampf(penetration, 0.0f, 1.0f);
-
-          // Die maximal erlaubte Geschwindigkeit sinkt linear
-          float currentLimit = (1.0f - penetration) * cfg.maxSoft;
-
-          // Drosseln, falls zu schnell
-          if (fabsf(velCmd) > currentLimit) {
-              velCmd = signPos * currentLimit;
-          }
-      }
-
-      // --- B: Hard Zone (Exponenzieller Rückstoß) ---
-      // Wenn wir über die Linie rutschen, drückt uns eine "Feder" zurück.
-      if (absPos > startHard) {
-          float deep = absPos - startHard; // Eindringtiefe in cm
-          
-          // Exponenzieller Rückstoß: F = k * (e^x - 1)
-          // Das fühlt sich bei kleiner Tiefe weich an (x ~= e^x-1) und wird dann brutal hart.
-          // Mit kPush = 1.0 hat man bei 4cm Eindringtiefe schon Max-Power.
-          float pushForce = cfg.kPush * (expf(deep) - 1.0f);
-          
-          // Begrenzung der Rückstoßkraft (gegen Oszillation und Übersteuern)
-          pushForce = clampf(pushForce, 0.0f, cfg.maxHard);
-
-          // Kraft wirkt immer nach INNEN (entgegen der Position)
-          velCmd -= signPos * pushForce;
-      }
   };
 
-  // Physik auf beide Achsen anwenden
-  applyAxisPhysics(cmd.x, px, cfg.xLimit, escapeX);
-  applyAxisPhysics(cmd.y, py, cfg.yLimit, escapeY);
-  
-  // (Optional) Vektor-Limitierung
-  float vSq = cmd.x*cmd.x + cmd.y*cmd.y;
-  float absoluteMax = cfg.maxHard * 1.41f + 10.0f; // Toleranz
-  if (vSq > absoluteMax * absoluteMax) {
-      float scale = absoluteMax / sqrtf(vSq);
-      cmd.x *= scale;
-      cmd.y *= scale;
+
+  // ═══════════════════════════════════════════════════════════
+  //  1.  X-ACHSE  (Seitenwände – immer gleich)
+  // ═══════════════════════════════════════════════════════════
+
+  float safeLineX = cfg.xLimit - cfg.safeMarginX;
+  processAxis(cmd.x, px, safeLineX);
+
+
+  // ═══════════════════════════════════════════════════════════
+  //  2.  Y-ACHSE  (dynamisch: Wand oder Tor?)
+  // ═══════════════════════════════════════════════════════════
+  //
+  //  Entscheidung basiert auf X-Position des Bots:
+  //    |px| > goalHalfWidth  →  Bot steht VOR WAND
+  //    |px| ≤ goalHalfWidth  →  Bot steht VOR TOR-ÖFFNUNG
+
+  float safeLineY;
+
+  if (fabsf(px) <= cfg.goalHalfWidth) {
+    // ── Vor dem Tor: safeLine ENGER (damit Bot nicht reinfährt) ──
+    safeLineY = cfg.yLimit - cfg.goalSafeMarginY;
+  } else {
+    // ── Vor der Wand: safeLine normal ────────────────────────────
+    safeLineY = cfg.yLimit - cfg.safeMarginY;
+  }
+
+  processAxis(cmd.y, py, safeLineY);
+
+
+  // ═══════════════════════════════════════════════════════════
+  //  3.  Absolute Sicherheitsgrenze
+  // ═══════════════════════════════════════════════════════════
+
+  constexpr float ABSOLUTE_MAX = 250.0f;
+  float vSq = cmd.x * cmd.x + cmd.y * cmd.y;
+  if (vSq > ABSOLUTE_MAX * ABSOLUTE_MAX) {
+    float scale = ABSOLUTE_MAX / sqrtf(vSq);
+    cmd.x *= scale;
+    cmd.y *= scale;
   }
 }

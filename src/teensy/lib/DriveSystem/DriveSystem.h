@@ -84,22 +84,22 @@ private:
 
   // ------------- Tuning / Parameter -------------
   // Oberes PWM-Limit (wird für Mapping genutzt)
-  int   MAX_PWM_OUTPUT = 150;
+  int   MAX_PWM_OUTPUT = 220;
 
   // Umrechnung Rotation -> tangentiale Geschwindigkeit: v_tan = r * rot_to_lin
-  float rot_to_lin = 0.18f;   // [m] Roboter-"Radius" zur Drehachse
+  float rot_to_lin = 0.09f;   // [m] Roboter-"Radius" zur Drehachse
 
   // Deadband in "v"-Einheiten
-  float deadband = 2.0f;
+  float deadband = 0.3f;
 
   // max. PWM-Schritt pro drive()-Aufruf
-  int   slewPerCycle = 8;
+  int   slewPerCycle = 30;
 
   // Mindest-PWM (um Haftreibung sicher zu überwinden)
   int   minSpeed = 26;
 
   // Maximaler "v"-Wert (Bezug für L∞-Skalierung + Mapping)
-  float maxSpeed = 100.0f;
+  float maxSpeed = 210.0f;
 
   // ------------- Pins (je Motor: A, B, PWM) -------------
   int motorVRpin[3] = {3, 4, 15}; 

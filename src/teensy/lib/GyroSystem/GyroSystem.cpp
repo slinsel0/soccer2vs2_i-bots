@@ -27,7 +27,7 @@ void GyroSystem::begin()
 
     // Game Rotation Vector aktivieren (Kein Magnetometer, ähnlich IMUPLUS)
     // 10ms Report-Rate (100Hz)
-    if (!bno08x.enableReport(SH2_GAME_ROTATION_VECTOR, 10000)) { 
+    if (!bno08x.enableReport(SH2_GAME_ROTATION_VECTOR, 50000)) { 
         Serial.println("Konnte Game Rotation Vector nicht aktivieren");
     }
 }
