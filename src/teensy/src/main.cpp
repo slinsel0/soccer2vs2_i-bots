@@ -45,7 +45,7 @@ static constexpr uint32_t CMD_TIMEOUT_MS        = 500;   // Kein Paket vom Pi   
 // ═══════════════════ PID-REGLER ════════════════════════════════
 //
 //  Gyro-Heading:  Hält den Roboter auf 0° ausgerichtet
-PIDController pidGyro(9.5f, 0.001f, 0.1f, /* dt_ms */ 0, /* iLim */ 25.0f);
+PIDController pidGyro(6.5f, 0.00f, 0.0f, /* dt_ms */ 0, /* iLim */ 25.0f);
 
 //  Ball-Richtung (Pixel→Speed):
 //    Kamera-Offset vom Spiegelzentrum (max ~±520 px) → Fahrbefehl.
@@ -82,8 +82,8 @@ PIDController pidCenterY(4.0f, 0.0f, 0.3f, 0, 0.0f);
 //
 static const BoundsConfig kBounds = {
   // ── Feldgrenzen (halbe Maße in cm) ──
-  /* xLimit          */  71.0f,    // 182 / 2
-  /* yLimit          */ 100.5f,    // 243 / 2
+  /* xLimit          */  61.0f,    // 182 / 2
+  /* yLimit          */ 88.5f,    // 243 / 2
 
   // ── Tor-Geometrie ──
   /* goalHalfWidth   */  30.0f,    // 60 / 2
@@ -253,34 +253,111 @@ void loop() {
     }
 
     // ── CHASE_BALL:  Zum Ball fahren ─────────────────────────
-    case CHASE_BALL: {
-      //  Ball-Position in lokalen Pixel-Koordinaten
-      float ballLocalX =  -(last_vx - CAM_CENTER_X);   // +  = Ball rechts
-      float ballLocalY = -(last_vy - CAM_CENTER_Y);   // +  = Ball vorne
+     case CHASE_BALL: {
 
-      // ── Tuning-Konstanten ──
-      constexpr float BEHIND_OFFSET   = 150.0f;  // Pixel: wie weit hinter den Ball
-      constexpr float ALIGN_THRESHOLD =  60.0f;  // Pixel: ab wann bin ich "ausgerichtet"
-      constexpr float PUSH_SPEED      = 180.0f;  // Extra Vorwärts-Speed beim Schieben
+      //  Ball in lokalen Pixel-Koordinaten (Spiegelzentrum)
+      float bx = -(last_vx - CAM_CENTER_X);    // -  = Spiegel invertiert X
+      float by = -(last_vy - CAM_CENTER_Y);     // +  = Ball vorne
+      float dist = sqrtf(bx * bx + by * by);    // Distanz in Pixel
 
-      // ── Ziel berechnen ──
-      float targetX = ballLocalX;                 // X: immer zum Ball ausrichten
-      float targetY;
+      // ═══════════ TUNING ═══════════════════════════════════
+      // Spiegel-Radien: inner ~190px, outer ~520px
+      // → Ball max ~330px entfernt (outer - inner)
 
-      bool aligned = fabsf(ballLocalX) < ALIGN_THRESHOLD;
-      bool ballInFront = ballLocalY > 0.0f;
+      constexpr float ORBIT_RADIUS    = 200.0f;  // Bogen-Ausschwenken (px)
+      constexpr float BEHIND_OFFSET   = 180.0f;  // Zielpunkt hinter Ball (px)
 
-      if (aligned && ballInFront) {
-        // ── PUSH: Ausgerichtet & Ball vorne → DURCHSCHIEBEN ──
-        targetY = ballLocalY + PUSH_SPEED;        // Volle Kraft voraus durch den Ball
-      } else {
-        // ── ALIGN: Erstmal HINTER den Ball fahren ──
-        targetY = ballLocalY - BEHIND_OFFSET;     // Punkt hinter dem Ball ansteuern
+      constexpr float FAR_DIST        = 300.0f;  // > das: FAR Phase
+      constexpr float PUSH_DIST       = 100.0f;  // < das: PUSH Phase
+      constexpr float APPROACH_ALIGN  =  70.0f;  // |bx| < das: APPROACH
+      constexpr float PUSH_ALIGN      =  45.0f;  // |bx| < das: PUSH erlaubt
+
+      constexpr float PUSH_BOOST      = 200.0f;  // Y-Speed im PUSH
+      constexpr float FAR_SPEED_SCALE =   0.6f;  // Speed-Faktor im FAR
+
+      // ═══════════ HILFSVARIABLEN ═══════════════════════════
+
+      // "frontness": wie sehr der Ball VOR dem Bot ist (0→1)
+      //   0 = Ball hinter mir → kein Orbit nötig
+      //   1 = Ball direkt vor mir → voller Orbit
+      float frontness = 0.0f;
+      if (by > 0.0f) {
+        frontness = fminf(by / 200.0f, 1.0f);
       }
 
-      //  PID: Pixel-Fehler → Speed
+      // Orbit-Richtung: Ball rechts → schwenke WEITER rechts
+      //   So umfährt der Bot den Ball im Bogen
+      float orbitDir = (bx >= 0.0f) ? 1.0f : -1.0f;
+
+      // ═══════════ PHASEN-LOGIK ═════════════════════════════
+
+      float targetX, targetY;
+      int   phase;    // Debug: 0=PUSH 1=APPROACH 2=FAR 3=ORBIT
+
+      bool xPushReady  = fabsf(bx) < PUSH_ALIGN;
+      bool xApproach   = fabsf(bx) < APPROACH_ALIGN;
+      bool ballInFront = by > 0.0f;
+
+      if (dist < PUSH_DIST && xPushReady && ballInFront) {
+
+        // ─── PUSH ────────────────────────────────────────────
+        //  Nah genug, X stimmt, Ball vorne → VOLLGAS!
+        phase   = 0;
+        targetX = bx;
+        targetY = by + PUSH_BOOST;
+
+      } else if (xApproach && ballInFront && dist < FAR_DIST) {
+
+        // ─── APPROACH ────────────────────────────────────────
+        //  X passt, Ball vorne → geradeaus ran, kontrolliert
+        phase   = 1;
+        targetX = bx;
+        targetY = by;
+
+        // Je näher ich komme, desto langsamer (nicht reinballern)
+        float speedScale = fminf(dist / PUSH_DIST, 1.5f);
+        targetY *= speedScale;
+        if (targetY < 25.0f) targetY = 25.0f;  // Minimum
+
+      } else if (dist > FAR_DIST) {
+
+        // ─── FAR ─────────────────────────────────────────────
+        //  Weit weg → schnell grob in Richtung Ball
+        //  Leichter Orbit (30%) damit er nicht frontal ankommt
+        phase   = 2;
+        float softOrbit = orbitDir * ORBIT_RADIUS * 0.3f * frontness;
+        targetX = (bx + softOrbit) * FAR_SPEED_SCALE;
+        targetY = (by - BEHIND_OFFSET * 0.4f) * FAR_SPEED_SCALE;
+
+      } else {
+
+        // ─── ORBIT ───────────────────────────────────────────
+        //  Ball nah + seitlich → UMFAHREN!
+        //
+        //  orbitX:  Ausschwenken auf Ball-Seite
+        //    → frontness hoch (Ball vor mir) → voller Bogen
+        //    → frontness niedrig (Ball hinter mir) → kaum Bogen
+        //    → Näher am Ball → engerer Bogen (distFactor)
+        phase = 3;
+
+        float distFactor = 1.0f - fminf(dist / FAR_DIST, 1.0f);
+        float orbitX = orbitDir * ORBIT_RADIUS
+                     * frontness
+                     * (0.4f + 0.6f * distFactor);
+
+        targetX = bx + orbitX;
+        targetY = by - BEHIND_OFFSET;
+      }
+
+      //  PID → Fahrbefehle
       driveCmd.x = pidBallX.update(targetX);
       driveCmd.y = pidBallY.update(targetY);
+
+      // Debug
+      // Serial.print(">chase_phase:");  Serial.println(phase);
+      // Serial.print(">ball_dist:");    Serial.println(dist);
+      // Serial.print(">ball_bx:");      Serial.println(bx);
+      // Serial.print(">ball_by:");      Serial.println(by);
       break;
     }
   }
@@ -289,7 +366,7 @@ void loop() {
   applyFieldBounds(driveCmd, p_x, p_y, kBounds);
 
   // ──────────── 6.  Notfall: kein Pi-Kontakt ────────────────
-  // if (!got_cmd || (now - last_cmd_ms) > CMD_TIMEOUT_MS) {
+  // if (!got_cmd || (now - slast_cmd_ms) > CMD_TIMEOUT_MS) {
   //   driveCmd.x *= 0.3f;          // Sanft ausbremsen
   //   driveCmd.y *= 0.3f;
   // }
@@ -299,11 +376,12 @@ void loop() {
   Drive.drive();
 
   // ──────────── 8.  Debug / Teleplot ─────────────────────────
-  // Serial.print(">state:");       Serial.println(state);
-  // Serial.print(">p_x:");        Serial.println(p_x);
-  // Serial.print(">p_y:");        Serial.println(p_y);
-  // Serial.print(">ball_valid:"); Serial.println(last_valid);
-  // Serial.print(">drv_x:");      Serial.println(driveCmd.x);
-  // Serial.print(">drv_y:");      Serial.println(driveCmd.y);
+  Serial.print(">state:");       Serial.println(state);
+  Serial.print(">p_x:");        Serial.println(p_x);
+  Serial.print(">p_y:");        Serial.println(p_y);
+  Serial.print(">ball_valid:"); Serial.println(last_valid);
+  Serial.print(">drv_x:");      Serial.println(driveCmd.x);
+  Serial.print(">drv_y:");      Serial.println(driveCmd.y);
+  Serial.print(">rotcmd:");      Serial.println(rotCmd);
 }
 

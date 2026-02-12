@@ -13,7 +13,7 @@
 
 // Glättungsfaktor (0.01 = sehr träge/glatt, 1.0 = kein Filter)
 // Vorher 0.3 -> Jetzt 0.08 für mehr Ruhe im Stillstand
-#define FILTER_ALPHA 0.08f 
+#define FILTER_ALPHA 1.0f 
 
 // --- Globale Variablen ---
 Vec2 Player = {0.0f, 0.0f}; // Startposition Mitte (in mm)

@@ -87,7 +87,7 @@ private:
   int   MAX_PWM_OUTPUT = 220;
 
   // Umrechnung Rotation -> tangentiale Geschwindigkeit: v_tan = r * rot_to_lin
-  float rot_to_lin = 0.09f;   // [m] Roboter-"Radius" zur Drehachse
+  float rot_to_lin = 0.18f;   // [m] Roboter-"Radius" zur Drehachse
 
   // Deadband in "v"-Einheiten
   float deadband = 0.3f;
