@@ -49,11 +49,11 @@ void DriveSystem::setMotor(int pinA, int pinB, int pinPWM, int speed) {
 DriveSystem::DriveSystem() {
   motorVR = motorHR = motorHL = motorVL = 0;
 
-  // Matrix: gleiche Projektion wie bei dir (cos/sin), plus Rotations-Spalte
-  M[0][0] = cos(motorVRversatz); M[0][1] = sin(motorVRversatz); M[0][2] = rot_to_lin;
-  M[1][0] = cos(motorHRversatz); M[1][1] = sin(motorHRversatz); M[1][2] = rot_to_lin;
-  M[2][0] = cos(motorHLversatz); M[2][1] = sin(motorHLversatz); M[2][2] = rot_to_lin;
-  M[3][0] = cos(motorVLversatz); M[3][1] = sin(motorVLversatz); M[3][2] = rot_to_lin;
+  // Matrix: Projektion (cos/sin) + Rotations-Spalte (direkt 1.0)
+  M[0][0] = cos(motorVRversatz); M[0][1] = sin(motorVRversatz); M[0][2] = 1.0f;
+  M[1][0] = cos(motorHRversatz); M[1][1] = sin(motorHRversatz); M[1][2] = 1.0f;
+  M[2][0] = cos(motorHLversatz); M[2][1] = sin(motorHLversatz); M[2][2] = 1.0f;
+  M[3][0] = cos(motorVLversatz); M[3][1] = sin(motorVLversatz); M[3][2] = 1.0f;
 }
 
 
@@ -61,40 +61,40 @@ DriveSystem::DriveSystem() {
 
 
 void DriveSystem::calcDrive(float vX, float vY, float r_cmd) {
-  // 1) getrennt rechnen
+  // 1) Translation und Rotation getrennt berechnen
   float wT[4], wR[4];
   const float c[4] = { cos(motorVRversatz), cos(motorHRversatz), cos(motorHLversatz), cos(motorVLversatz) };
   const float s[4] = { sin(motorVRversatz), sin(motorHRversatz), sin(motorHLversatz), sin(motorVLversatz) };
 
   for (int i=0;i<4;++i) {
-    wT[i] = c[i]*vX + s[i]*vY;          // Translation pro Rad
-    wR[i] = rot_to_lin * r_cmd;         // Rotation pro Rad (gleich für alle)
+    wT[i] = c[i]*vX + s[i]*vY;
+    wR[i] = r_cmd;
   }
 
-  // 2) Rotation priorisieren
+  // 2) Translation auf maxSpeedTrans clampen
+  float maxT = 0.f; for (int i=0;i<4;++i) maxT = fmaxf(maxT, fabsf(wT[i]));
+  if (maxT > maxSpeedTrans && maxSpeedTrans > 0) {
+    float s_t = maxSpeedTrans / maxT;
+    for (int i=0;i<4;++i) wT[i] *= s_t;
+  }
+
+  // 3) Rotation auf maxSpeedRot clampen
   float maxR = 0.f; for (int i=0;i<4;++i) maxR = fmaxf(maxR, fabsf(wR[i]));
-  float s_rot = (maxR > maxSpeed && maxSpeed>0) ? (maxSpeed / maxR) : 1.f;
-  for (int i=0;i<4;++i) wR[i] *= s_rot;
-
-  // 3) Rest-Headroom für Translation berechnen
-  float s_trans = 1.f;
-  for (int i=0;i<4;++i) {
-    float hi = maxSpeed - fabsf(wR[i]);
-    if (fabsf(wT[i]) > 1e-6f) {
-      s_trans = fminf(s_trans, clampf(hi / fabsf(wT[i]), 0.f, 1.f));
-    }
+  if (maxR > maxSpeedRot && maxSpeedRot > 0) {
+    float s_r = maxSpeedRot / maxR;
+    for (int i=0;i<4;++i) wR[i] *= s_r;
   }
 
-  // 4) mischen + Deadband + PWM-Mapping (deine float-Map)
+  // 4) Zusammenmischen
+  float w[4];
+  for (int i=0;i<4;++i) w[i] = wT[i] + wR[i];
+
+  // 5) PWM: direkt den Wert als PWM nutzen, auf MAX_PWM_OUTPUT deckeln
   auto toPWM = [&](float v)->int {
     if (fabsf(v) < deadband) return 0;
-    float mag = lmapf(fabsf(v), 0.f, maxSpeed, (float)minSpeed, (float)MAX_PWM_OUTPUT);
-    int pwm = (int)lrintf(clampf(mag, (float)minSpeed, (float)MAX_PWM_OUTPUT));
+    int pwm = (int)lrintf(clampf(fabsf(v), (float)minSpeed, (float)MAX_PWM_OUTPUT));
     return v>=0 ? pwm : -pwm;
   };
-
-  float w[4];
-  for (int i=0;i<4;++i) w[i] = wR[i] + s_trans*wT[i];
 
   motorVR = toPWM(w[0]);
   motorHR = toPWM(w[1]);
