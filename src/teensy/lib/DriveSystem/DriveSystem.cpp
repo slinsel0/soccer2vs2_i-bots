@@ -21,13 +21,13 @@ void DriveSystem::setMotor(int pinA, int pinB, int pinPWM, int speed) {
   const int HOLD_PWM = 26;           // hält Treiber „wach“ (wie bei dir)
   int pwm = abs(speed);
 
-  if (pwm == 0) {
-    // neutral / leichter Hold
-    digitalWrite(pinA, HIGH);
-    digitalWrite(pinB, LOW);
-    analogWrite(pinPWM, HOLD_PWM);
-    return;
-  }
+  // if (pwm == 0) {
+  //   // neutral / leichter Hold
+  //   digitalWrite(pinA, HIGH);
+  //   digitalWrite(pinB, LOW);
+  //   analogWrite(pinPWM, HOLD_PWM);
+  //   return;
+  // }
 
   // Mindest-PWM gegen Haftreibung
   if (pwm < minSpeed) pwm = minSpeed;

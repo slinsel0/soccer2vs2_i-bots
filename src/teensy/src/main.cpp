@@ -39,7 +39,7 @@ enum RobotState {
 static RobotState state = NO_BALL;
 
 // ─────────────────── Zeitkonstanten (ms) ───────────────────────
-static constexpr uint32_t BALL_LOST_TIMEOUT_MS  = 300;   // nach 300 ms ohne Ball → NO_BALL
+static constexpr uint32_t BALL_LOST_TIMEOUT_MS  = 700;   // nach 300 ms ohne Ball → NO_BALL
 static constexpr uint32_t CMD_TIMEOUT_MS        = 500;   // Kein Paket vom Pi     → Notfall
 
 // ═══════════════════ PID-REGLER ════════════════════════════════
@@ -95,7 +95,7 @@ static const BoundsConfig kBounds = {
                                    //   Bot bleibt 30cm vor Torlinie → genug Platz zum Schießen
 
   // ── Pull-Regler ──
-  /* kPull           */  5.0f,   // 10cm draussen → Speed 80
+  /* kPull           */  15.0f,   // 10cm draussen → Speed 80
   /* maxPull         */ 180.0f     // Max Rückzug-Speed
 };
 // ═══════════════════ KAMERA-KONSTANTEN ═════════════════════════
@@ -328,7 +328,7 @@ void loop() {
   }
 
   // ──────────── 5.  Out-of-Bounds: Axis-Lock + Pull ───────────
-  //  applyFieldBounds(driveCmd, p_x, p_y, kBounds);
+    applyFieldBounds(driveCmd, p_x, p_y, kBounds);
 
   // ──────────── 6.  Notfall: kein Pi-Kontakt ────────────────
   // if (!got_cmd || (now - slast_cmd_ms) > CMD_TIMEOUT_MS) {

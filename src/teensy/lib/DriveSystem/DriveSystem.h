@@ -67,9 +67,11 @@ public:
   float getDeadband() const { return deadband; }
   int   getSlewPerCycle() const { return slewPerCycle; }
 
+    void setMotor(int pinA, int pinB, int pinPWM, int speed);
+
+
 private:
   // Interne Motor-Ansteuerung (Richtung + PWM)
-  void setMotor(int pinA, int pinB, int pinPWM, int speed);
 
   // Matrix nach Winkel-/Radius-Änderungen neu aufbauen
   void rebuildMatrix();
