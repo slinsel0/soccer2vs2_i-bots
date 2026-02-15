@@ -32,11 +32,11 @@ public:
   void setMotorAngles(float vrAngle, float hrAngle, float hlAngle, float vlAngle);
 
   // Limits anpassen:
-  // - maxSpeedTrans: Max Translation (vX/vY)
-  // - maxSpeedRot:   Max Rotation (r_cmd)
-  // - minPwm:        Mindest-PWM gegen Haftreibung
-  // - maxPwm:        Oberes PWM-Limit (standard 220)
-  void setLimits(float maxSpeedTrans_, float maxSpeedRot_, int minPwm, int maxPwm);
+  // - maxSpeed:    Max Translation PWM
+  // - maxRotation: Max Rotation PWM
+  // - minPwm:      Mindest-PWM gegen Haftreibung
+  // - maxPwm:      Oberes PWM-Limit (standard 220)
+  void setLimits(int maxSpeed_, int maxRotation_, int minPwm, int maxPwm);
 
   // Deadband in "v"-Einheiten (kleine Werte auf 0 setzen)
   void setDeadband(float db);
@@ -60,8 +60,8 @@ public:
   int  getMotorHL() const { return motorHL; }
   int  getMotorVL() const { return motorVL; }
 
-  float getMaxSpeedTrans() const { return maxSpeedTrans; }
-  float getMaxSpeedRot()   const { return maxSpeedRot; }
+  int   getMaxSpeed()    const { return maxSpeed; }
+  int   getMaxRotation() const { return maxRotation; }
   int   getMinPwm()   const { return minSpeed; }
   int   getMaxPwm()   const { return MAX_PWM_OUTPUT; }
   float getDeadband() const { return deadband; }
@@ -83,7 +83,7 @@ private:
   int   MAX_PWM_OUTPUT = 220;
 
   // Deadband in "v"-Einheiten
-  float deadband = 0.3f;
+  float deadband = 0.0f;
 
   // max. PWM-Schritt pro drive()-Aufruf
   int   slewPerCycle = 220;
@@ -91,11 +91,11 @@ private:
   // Mindest-PWM (um Haftreibung sicher zu überwinden)
   int   minSpeed = 26;
 
-  // Max PWM für Translation (vX/vY) — direkt in PWM-Einheiten
-  float maxSpeedTrans = 400.0f;
+  // Max Translation (PWM-Einheiten)
+  int maxSpeed = 110;
 
-  // Max PWM für Rotation (r_cmd) — direkt in PWM-Einheiten
-  float maxSpeedRot = 100.0f;
+  // Max Rotation (PWM-Einheiten)
+  int maxRotation = 110;
 
   // ------------- Pins (je Motor: A, B, PWM) -------------
   int motorVRpin[3] = {3, 4, 15}; 

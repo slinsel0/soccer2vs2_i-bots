@@ -45,7 +45,7 @@ static constexpr uint32_t CMD_TIMEOUT_MS        = 500;   // Kein Paket vom Pi   
 // ═══════════════════ PID-REGLER ════════════════════════════════
 //s
 //  Gyro-Heading:  Hält den Roboter auf 0° ausgerichtet
-PIDController pidGyro(2.5f, 0.000f, 0.16f, /* dt_ms */ 0, /* iLim */ 25.0f);
+PIDController pidGyro(1.0f, 0.000f, 0.005f, /* dt_ms */ 0, /* iLim */ 25.0f);
 
 //  Ball-Richtung (Pixel→Speed):
 //    Kamera-Offset vom Spiegelzentrum (max ~±520 px) → Fahrbefehl.
@@ -57,8 +57,8 @@ PIDController pidBallY(4.5f, 0.0f, 0.05f, 0, 0.0f);
 //  Return-to-Center (Lidar cm → Speed):
 //    Position in cm (max ~±90).  P=2.0 → 90 cm Fehler = 180 Speed
 //    D=0.3 → verhindert Überschwingen beim Ankommen
-PIDController pidCenterX(4.0f, 0.0f, 0.0f, 0, 0.0f);
-PIDController pidCenterY(4.0f, 0.0f, 0.0f, 0, 0.0f);
+PIDController pidCenterX(10.0f, 0.0f, 0.0f, 0, 0.0f);
+PIDController pidCenterY(10.0f, 0.0f, 0.0f, 0, 0.0f);
 
 // ═══════════════════ FELDGRENZEN (Axis-Lock + Tor-Zonen) ══════
 //s
@@ -95,7 +95,7 @@ static const BoundsConfig kBounds = {
                                    //   Bot bleibt 30cm vor Torlinie → genug Platz zum Schießen
 
   // ── Pull-Regler ──
-  /* kPull           */   15.0f,    // 10cm draussen → Speed 80
+  /* kPull           */  5.0f,   // 10cm draussen → Speed 80
   /* maxPull         */ 180.0f     // Max Rückzug-Speed
 };
 // ═══════════════════ KAMERA-KONSTANTEN ═════════════════════════
@@ -174,11 +174,22 @@ void setup() {
   gyro.begin();
   LidarBegin();
 
+  pinMode(triggerPin, INPUT_PULLUP);
+
+pinMode(kickerPin, OUTPUT);
+
+digitalWrite(kickerPin, LOW);
+
+
+
+
+  
+
 
   // pinMode(kickerPin, OUTPUT);
-  // digitalWrite(kickerPin, LOW);
 
   // delay(1000);
+  delay(1000);
 
   // digitalWrite(kickerPin, HIGH);
   // delay(20);
@@ -189,7 +200,6 @@ void setup() {
 
   state = NO_BALL;
 
-  delay(1000);
 }
 
 
@@ -197,15 +207,15 @@ void setup() {
 static Vec2 computeBehindBallTarget(float ballX, float ballY) {
   Vec2 offset = {0.0f, 0.0f};
   // Einfache Logik: Hinter den Ball fahren
-  if (ballY > 0.0f) {
-    if (fabsf(ballX) < 10.0f) {
-      offset.x = 0.0f; offset.y = 0.0f;
+  if (ballY > 200.0f) {
+    if (fabsf(ballX) < 100.0f) {
+      offset.x = 0.0f; offset.y = -300.0f;
     } else {
-      offset.y = 80.0f;
+      offset.y = -245.0f;
     }
   } else {
-    offset.x = (ballX < 0.0f) ? -50.0f : 50.0f;
-    offset.y = 75.0f;
+    offset.x = (ballX < 0.0f) ? -150.0f : 150.0f;
+    offset.y = 400.0f;
   }
   return { ballX - offset.x, ballY - offset.y };
 }
@@ -307,14 +317,18 @@ void loop() {
 
       // Debug
 
-      Serial.print(">ball_bx:");      Serial.println(bx);
-      Serial.print(">ball_by:");      Serial.println(by);
+      Serial.print(">ball_bx:");    
+      
+      Serial.println(bx);
+      Serial.print(">ball_by:");      
+      
+      Serial.println(by);
       break;
     }
   }
 
   // ──────────── 5.  Out-of-Bounds: Axis-Lock + Pull ───────────
-   applyFieldBounds(driveCmd, p_x, p_y, kBounds);
+  //  applyFieldBounds(driveCmd, p_x, p_y, kBounds);
 
   // ──────────── 6.  Notfall: kein Pi-Kontakt ────────────────
   // if (!got_cmd || (now - slast_cmd_ms) > CMD_TIMEOUT_MS) {
@@ -323,8 +337,19 @@ void loop() {
   // }
 
   // ──────────── 7.  Motoren ansteuern ────────────────────────
-  Drive.calcDrive(driveCmd.x, -driveCmd.y, -rotCmd);
-  Drive.drive();
+
+
+  if (digitalRead(triggerPin) == HIGH) {
+    Drive.calcDrive(0, 0, -0);
+  }
+
+  else {
+    Drive.calcDrive(driveCmd.x, -driveCmd.y, -rotCmd);
+  }
+
+    Drive.drive();
+
+
 
 
   // ──────────── 8.  Debug / Teleplot ─────────────────────────
@@ -332,8 +357,15 @@ void loop() {
   // Serial.print(">p_x:");        Serial.println(p_x);
   // Serial.print(">p_y:");        Serial.println(p_y);
   // Serial.print(">ball_valid:"); Serial.println(last_valid);
-  // Serial.print(">drv_x:");      Serial.println(driveCmd.x);
-  // Serial.print(">drv_y:");      Serial.println(driveCmd.y);
+  // Serial.print(">MOTORVR:");      Serial.println(Drive.getMotorVR());
+  // Serial.print(">MOTORHR:");      Serial.println(Drive.getMotorHR());
+  // Serial.print(">MOTORHL:");      Serial.println(Drive.getMotorHL());
+  // Serial.print(">MOTORVL:");      Serial.println(Drive.getMotorVL());
   // Serial.print(">rotcmd:");      Serial.println(rotCmd);
+
+
+
+
+
 }
 

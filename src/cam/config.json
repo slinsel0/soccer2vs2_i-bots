@@ -18,11 +18,11 @@
         "debug_view": true,
         "ball": {
             "h_min": 0,
-            "h_max": 2,
-            "s_min": 232,
+            "h_max": 3,
+            "s_min": 223,
             "s_max": 255,
-            "v_min": 132,
-            "v_max": 158,
+            "v_min": 98,
+            "v_max": 182,
             "min_area_px": 5,
             "max_area_px": 5000,
             "min_circularity": 0.1
