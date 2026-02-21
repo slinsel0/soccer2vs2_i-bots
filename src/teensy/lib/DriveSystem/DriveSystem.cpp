@@ -21,13 +21,13 @@ void DriveSystem::setMotor(int pinA, int pinB, int pinPWM, int speed) {
   const int HOLD_PWM = 26;           // hält Treiber „wach“ (wie bei dir)
   int pwm = abs(speed);
 
-  if (pwm == 0) {
-    // neutral / leichter Hold
-    digitalWrite(pinA, HIGH);
-    digitalWrite(pinB, LOW);
-    analogWrite(pinPWM, HOLD_PWM);
-    return;
-  }
+  // if (pwm == 0) {
+  //   // neutral / leichter Hold
+  //   digitalWrite(pinA, HIGH);
+  //   digitalWrite(pinB, LOW);
+  //   analogWrite(pinPWM, HOLD_PWM);
+  //   return;
+  // }
 
   // Mindest-PWM gegen Haftreibung
   if (pwm < minSpeed) pwm = minSpeed;
@@ -60,46 +60,44 @@ DriveSystem::DriveSystem() {
 // ------------------------ calcDrive ------------------------
 
 
-void DriveSystem::calcDrive(float vX, float vY, float r_cmd) {
-  // 1) Translation und Rotation getrennt berechnen
-  float wT[4], wR[4];
-  const float c[4] = { cos(motorVRversatz), cos(motorHRversatz), cos(motorHLversatz), cos(motorVLversatz) };
-  const float s[4] = { sin(motorVRversatz), sin(motorHRversatz), sin(motorHLversatz), sin(motorVLversatz) };
+void DriveSystem::calcDrive(float vX, float vY, float r) {
+  // 1) Rotation begrenzen
+ if (r > maxRotation) r = maxRotation;
+  if (r < (maxRotation * -1)) r = maxRotation * -1;
 
-  for (int i=0;i<4;++i) {
-    wT[i] = c[i]*vX + s[i]*vY;
-    wR[i] = r_cmd;
+  // 2) Translation per Matrix berechnen (cos/sin Projektion)
+  motorVR = (int)lrintf(M[0][0]*vX + M[0][1]*vY);
+  motorHR = (int)lrintf(M[1][0]*vX + M[1][1]*vY);
+  motorHL = (int)lrintf(M[2][0]*vX + M[2][1]*vY);
+  motorVL = (int)lrintf(M[3][0]*vX + M[3][1]*vY);
+
+  // 3) Auf maxSpeed skalieren (Verhältnis beibehalten = gleiche Fahrrichtung)
+  int motorMAX = max(max(abs(motorVR), abs(motorHR)), max(abs(motorHL), abs(motorVL)));
+  if (motorMAX > maxSpeed) {
+    motorVR = motorVR * maxSpeed / motorMAX;
+    motorHR = motorHR * maxSpeed / motorMAX;
+    motorHL = motorHL * maxSpeed / motorMAX;
+    motorVL = motorVL * maxSpeed / motorMAX;
   }
 
-  // 2) Translation auf maxSpeedTrans clampen
-  float maxT = 0.f; for (int i=0;i<4;++i) maxT = fmaxf(maxT, fabsf(wT[i]));
-  if (maxT > maxSpeedTrans && maxSpeedTrans > 0) {
-    float s_t = maxSpeedTrans / maxT;
-    for (int i=0;i<4;++i) wT[i] *= s_t;
-  }
+  // 4) Rotation NACHHER addieren (unabhängig von Translation)
+  motorVR += r;
+  motorHR += r;
+  motorHL += r;
+  motorVL += r;
 
-  // 3) Rotation auf maxSpeedRot clampen
-  float maxR = 0.f; for (int i=0;i<4;++i) maxR = fmaxf(maxR, fabsf(wR[i]));
-  if (maxR > maxSpeedRot && maxSpeedRot > 0) {
-    float s_r = maxSpeedRot / maxR;
-    for (int i=0;i<4;++i) wR[i] *= s_r;
-  }
 
-  // 4) Zusammenmischen
-  float w[4];
-  for (int i=0;i<4;++i) w[i] = wT[i] + wR[i];
+  // 5) minSpeed Offset (Treiber-Totzone überwinden)
+  if (motorVR > 0) motorVR += minSpeed; else motorVR -= minSpeed;
+  if (motorHR > 0) motorHR += minSpeed; else motorHR -= minSpeed;
+  if (motorHL > 0) motorHL += minSpeed; else motorHL -= minSpeed;
+  if (motorVL > 0) motorVL += minSpeed; else motorVL -= minSpeed;
 
-  // 5) PWM: direkt den Wert als PWM nutzen, auf MAX_PWM_OUTPUT deckeln
-  auto toPWM = [&](float v)->int {
-    if (fabsf(v) < deadband) return 0;
-    int pwm = (int)lrintf(clampf(fabsf(v), (float)minSpeed, (float)MAX_PWM_OUTPUT));
-    return v>=0 ? pwm : -pwm;
-  };
-
-  motorVR = toPWM(w[0]);
-  motorHR = toPWM(w[1]);
-  motorHL = toPWM(w[2]);
-  motorVL = toPWM(w[3]);
+  // 6) Zu kleine Werte auf 0 (Zuckungen vermeiden)
+  if (abs(motorVR) < (minSpeed + 0)) motorVR = 0;
+  if (abs(motorHR) < (minSpeed + 0)) motorHR = 0;
+  if (abs(motorHL) < (minSpeed + 0)) motorHL = 0;
+  if (abs(motorVL) < (minSpeed + 0)) motorVL = 0;
 }
 
 
@@ -134,6 +132,12 @@ void DriveSystem::drive() {
   setMotor(motorHRpin[0], motorHRpin[1], motorHRpin[2], outHR);
   setMotor(motorHLpin[0], motorHLpin[1], motorHLpin[2], outHL);
   setMotor(motorVLpin[0], motorVLpin[1], motorVLpin[2], outVL);
+
+
+  // Serial.print(">MOTORVR:");      Serial.println(outVR);
+  // Serial.print(">MOTORHR:");      Serial.println(outHR);
+  // Serial.print(">MOTORHL:");      Serial.println(outHL);
+  // Serial.print(">MOTORVL:");      Serial.println(outVL);
 
   prevVR = outVR; prevHR = outHR; prevHL = outHL; prevVL = outVL;
 }

@@ -3,9 +3,9 @@
         "camera_index": 0,
         "width": 1456,
         "height": 1088,
-        "fps": 60,
-        "exposure_us": 15000,
-        "iso": 800,
+        "fps": 30,
+        "exposure_us": 59000,
+        "iso": 1600,
         "shm_name": "shm_cam_frame"
     },
     "mirror": {
@@ -15,14 +15,14 @@
         "radius_inner": 190
     },
     "vision": {
-        "debug_view": true,
+        "debug_view": false,
         "ball": {
-            "h_min": 7,
-            "h_max": 16,
-            "s_min": 231,
+            "h_min": 1,
+            "h_max": 6,
+            "s_min": 255,
             "s_max": 255,
-            "v_min": 55,
-            "v_max": 102,
+            "v_min": 45,
+            "v_max": 138,
             "min_area_px": 5,
             "max_area_px": 5000,
             "min_circularity": 0.1
