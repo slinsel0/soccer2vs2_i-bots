@@ -1,16 +1,3 @@
-/*  ═══════════════════════════════════════════════════════════════════════
- *  i-bots  ·  RoboCup Junior Soccer Open  ·  Teensy 4.0 Main
- *  ═══════════════════════════════════════════════════════════════════════
- *
- *  State-Machine:
- *    NO_BALL      → Ball nicht sichtbar   → Fahre zur Feldmitte (Lidar-Pos)
- *    CHASE_BALL   → Ball sichtbar         → Fahre zum Ball (Kamera-Pixel)
- *
- *  Datenfluss Pi → Teensy (COBS-Paket):
- *    vx    = Ball-Pixel cx    (Spiegel-Kamera 1456×1088)
- *    vy    = Ball-Pixel cy
- *    omega = valid-Flag       (1.0 = gefunden, 0.0 = nicht)
- *  ═══════════════════════════════════════════════════════════════════════ */
 
 #include <Arduino.h>
 #include "DriveSystem.h"
@@ -23,12 +10,14 @@
 #include <PIDController.h>
 #include <math.h>
 #include <outofbounce.h>
+#include "Rotationauthority .h"
 
-// ─────────────────────── Hardware-Objekte ───────────────────────
 COBSPacketSerial cobsSerial;
 FastCRC32        CRC32;
 GyroSystem       gyro;
 DriveSystem      Drive;
+RotationAuthority rotAuth;    // Fuzzy Heading-vs-Translation
+
 
 // ═══════════════════════ STATE MACHINE ══════════════════════════
 enum RobotState {
@@ -43,43 +32,17 @@ static constexpr uint32_t BALL_LOST_TIMEOUT_MS  = 700;   // nach 300 ms ohne Bal
 static constexpr uint32_t CMD_TIMEOUT_MS        = 500;   // Kein Paket vom Pi     → Notfall
 
 // ═══════════════════ PID-REGLER ════════════════════════════════
-//s
-//  Gyro-Heading:  Hält den Roboter auf 0° ausgerichtet
+
 PIDController pidGyro(1.0f, 0.000f, 0.005f, /* dt_ms */ 0, /* iLim */ 25.0f);
 
-//  Ball-Richtung (Pixel→Speed):
-//    Kamera-Offset vom Spiegelzentrum (max ~±520 px) → Fahrbefehl.
-//    P=0.4  → 500 px Fehler ≈ 200 Speed (Vollgas-Bereich)
-//    D=0.05 → leichte Dämpfung bei schnellen Balländerungen
-PIDController pidBallX(4.5f, 0.0f, 0.05f, 0, 0.0f);
-PIDController pidBallY(4.5f, 0.0f, 0.05f, 0, 0.0f);
 
-//  Return-to-Center (Lidar cm → Speed):
-//    Position in cm (max ~±90).  P=2.0 → 90 cm Fehler = 180 Speed
-//    D=0.3 → verhindert Überschwingen beim Ankommen
-PIDController pidCenterX(10.0f, 0.0f, 0.0f, 0, 0.0f);
-PIDController pidCenterY(10.0f, 0.0f, 0.0f, 0, 0.0f);
+PIDController pidBallX(0.5f, 0.0f, 0.005f, 0, 0.0f);
+PIDController pidBallY(0.5f, 0.0f, 0.005f, 0, 0.0f);
 
-// ═══════════════════ FELDGRENZEN (Axis-Lock + Tor-Zonen) ══════
-//s
-//  RCJ Soccer Field 2023:  182 × 243 cm,  Tore 60 cm breit
-//
-//       ┌──────────┬──── 60cm ────┬──────────┐
-//       │   WAND   │  BLUE GOAL   │   WAND   │  Y = +121.5
-//       ├──────────┘              └──────────┤
-//       │                                    │
-//       │           Spielfeld                │
-//       │            (0,0)                   │
-//       │                                    │
-//       ├──────────┐              ┌──────────┤
-//       │   WAND   │ YELLOW GOAL  │   WAND   │  Y = -121.5
-//       └──────────┴──── 60cm ────┴──────────┘
-//     X=-91       X=-30   0   X=+30        X=+91
-//
-//  Y-safeLine hängt von X ab:
-//    |x| > 30  →  Vor WAND     →  safeLine_Y = 121.5 - 10 = 111.5
-//    |x| ≤ 30  →  Vor TOR      →  safeLine_Y = 121.5 - 30 = 91.5  (ENGER!)
-//
+PIDController pidCenterX(2.0f, 0.0f, 0.0f, 0, 0.0f);
+PIDController pidCenterY(2.0f, 0.0f, 0.0f, 0, 0.0f);
+
+
 static const BoundsConfig kBounds = {
   // ── Feldgrenzen (halbe Maße in cm) ──
   /* xLimit          */  61.0f,    // 182 / 2
@@ -91,25 +54,24 @@ static const BoundsConfig kBounds = {
   // ── Sicherheitsmargen ──
   /* safeMarginX     */  2.0f,    // safeLine_X = 91 - 15 = 76 cm
   /* safeMarginY     */  3.0f,    // safeLine_Y (Wand) = 121.5 - 10 = 111.5 cm
-  /* goalSafeMarginY */  13.0f,    // safeLine_Y (Tor)  = 121.5 - 30 = 91.5 cm
-                                   //   Bot bleibt 30cm vor Torlinie → genug Platz zum Schießen
+  /* goalSafeMarginY */  18.0f,    // safeLine_Y (Tor)  = 121.5 - 30 = 91.5 cm
+
 
   // ── Pull-Regler ──
-  /* kPull           */  15.0f,   // 10cm draussen → Speed 80
-  /* maxPull         */ 180.0f     // Max Rückzug-Speed
+  /* kPull           */  15.0f,  
+  /* maxPull         */ 80.0f     
 };
 // ═══════════════════ KAMERA-KONSTANTEN ═════════════════════════
-//  Spiegelzentrum in Pixel (aus config.json: center_x=708, center_y=507)
+// offset für kamera guck in src/cam/config.json
 static constexpr float CAM_CENTER_X = 718.0f;
 static constexpr float CAM_CENTER_Y = 570.0f;
 
 // ═══════════════════ GLOBALE VARIABLEN ═════════════════════════
-float g_a = 0;           // Gyro-Heading in Grad
+float g_a = 0;           // Gyro angeldegess ausrichtung
 float p_x = 0;           // Roboter-Position X in cm (Lidar)
 float p_y = 0;           // Roboter-Position Y in cm (Lidar)
 const int kickerPin  = 22;  // Ausgang zur Spule
 const int triggerPin = 13;  // Eingang
-bool triggered = false;    // Merker, ob der Kick schon ausgelöst wurde
 
 
 
@@ -127,10 +89,10 @@ struct __attribute__((packed)) VectorCmd {
 
 volatile float    last_vx       = 0;
 volatile float    last_vy       = 0;
-volatile float    last_valid    = 0;     // war "last_omega" – jetzt klar benannt
+volatile float    last_valid    = 0;     
 volatile bool     got_cmd       = false;
 volatile uint32_t last_cmd_ms   = 0;
-volatile uint32_t last_ball_ms  = 0;     // Zeitstempel: letztes "Ball gesehen"
+volatile uint32_t last_ball_ms  = 0;     
 
 // ─────────────────── Paket-Handler (ISR-safe) ──────────────────
 void onPacketReceived(const uint8_t* buffer, size_t size) {
@@ -162,15 +124,12 @@ void onPacketReceived(const uint8_t* buffer, size_t size) {
   cobsSerial.send(ack_frame, sizeof(ack_frame));
 }
 
-// ═══════════════════════════════════════════════════════════════
-//                         SETUP
-// ═══════════════════════════════════════════════════════════════
+
 void setup() {
-   Serial.begin(2000000);
+ Serial.begin(2000000);
   cobsSerial.setStream(&Serial);
   cobsSerial.setPacketHandler(&onPacketReceived);
 
-  Wire1.begin();
   gyro.begin();
   LidarBegin();
 
@@ -183,17 +142,10 @@ digitalWrite(kickerPin, LOW);
 
 
 
-  
 
 
-  // pinMode(kickerPin, OUTPUT);
-
-  // delay(1000);
   delay(1000);
 
-  // digitalWrite(kickerPin, HIGH);
-  // delay(20);
-  // digitalWrite(kickerPin, LOW);
 
 
 
@@ -206,15 +158,15 @@ digitalWrite(kickerPin, LOW);
 
 static Vec2 computeBehindBallTarget(float ballX, float ballY) {
   Vec2 offset = {0.0f, 0.0f};
-  // Einfache Logik: Hinter den Ball fahren
-  if (ballY > 200.0f) {
+  
+  if (ballY > 200.0f) { // wenn der ball vorne ist
     if (fabsf(ballX) < 100.0f) {
       offset.x = 0.0f; offset.y = -300.0f;
     } else {
-      offset.y = -245.0f;
+      offset.y = 245.0f; // offset damit er nicht direkt drafu fährt 
     }
-  } else {
-    offset.x = (ballX < 0.0f) ? -150.0f : 150.0f;
+  } else { // wenn der ball hinten ist 
+    offset.x = (ballX < 0.0f) ? -150.0f : 150.0f; 
     offset.y = 400.0f;
   }
   return { ballX - offset.x, ballY - offset.y };
@@ -233,9 +185,9 @@ static Vec2 computeBehindBallTarget(float ballX, float ballY) {
 void loop() {
 
   // ──────────── 0.  Sensor-Updates ────────────────────────────
-  cobsSerial.update();
-  lidaar();
-  gyro.update();
+  cobsSerial.update(); // serielle kommunkation between pi 5 and teensy 4.1
+  lidaar();  // Verarbeitung plus Kommunkation
+  gyro.update(); 
 
   g_a = gyro.getAngleDegrees();
   p_x = Player.x * 0.1f;        // mm → cm
@@ -243,15 +195,12 @@ void loop() {
 
   const uint32_t now = millis();
 
-  // ──────────── 1.  Heading-PID (immer aktiv) ────────────────
   float rotCmd = pidGyro.update(g_a);
 
-  // ──────────── 2.  Ball-Status bestimmen ────────────────────
   bool ballVisible = (last_valid > 0.5f)
                   && (now - last_cmd_ms < CMD_TIMEOUT_MS);
 
-  //  Hysterese:  Ball erst nach BALL_LOST_TIMEOUT_MS als "verloren" werten
-  //              → verhindert Flackern bei kurzen Verdeckungen
+
   bool ballRecent = (now - last_ball_ms) < BALL_LOST_TIMEOUT_MS;
 
   // ──────────── 3.  State-Übergänge ─────────────────────────
@@ -279,43 +228,30 @@ void loop() {
 
   switch (state) {
 
-    // ── NO_BALL:  Zurück zur Feldmitte ───────────────────────
     case NO_BALL: {
-      //  Fehler = Position (NICHT negiert – passt zu eurem Drive/Lidar-System)
-      float errX = p_x;
-      float errY = p_y;
+      float errX = -p_x;
+      float errY = -p_y;
 
       driveCmd.x = pidCenterX.update(errX);
       driveCmd.y = pidCenterY.update(errY);
 
-      //  Speed deckeln (zur Mitte nicht rasen)
-      // constexpr float MAX_CENTER_SPEED = 120.0f;
-      // float mag = sqrtf(driveCmd.x * driveCmd.x + driveCmd.y * driveCmd.y);
-      // if (mag > MAX_CENTER_SPEED) {
-      //   float s = MAX_CENTER_SPEED / mag;
-      //   driveCmd.x *= s;
-      //   driveCmd.y *= s;
-      // }
+ 
       break;
     }
 
-    // ── CHASE_BALL:  Zum Ball fahren ─────────────────────────
      case CHASE_BALL: {
 
-      //  Ball in lokalen Pixel-Koordinaten (Spiegelzentrum)
-      float bx = -(last_vx - CAM_CENTER_X);    // -  = Spiegel invertiert X
-      float by = -(last_vy - CAM_CENTER_Y);     // +  = Ball vorne
+      float bx = (last_vx - CAM_CENTER_X);    // -  = Spiegel invertiert X
+      float by = (last_vy - CAM_CENTER_Y);     // +  = Ball vorne
 
-   Vec2 v = computeBehindBallTarget(bx, by);
+   Vec2 v = computeBehindBallTarget(-bx, -by);
 
 
       
 
-      //  PID → Fahrbefehle
-      driveCmd.x = pidBallX.update(v.x);
-      driveCmd.y = pidBallY.update(v.y);
+      driveCmd.x = pidBallX.update(-v.x);
+      driveCmd.y = pidBallY.update(-v.y);
 
-      // Debug
 
       Serial.print(">ball_bx:");    
       
@@ -327,35 +263,41 @@ void loop() {
     }
   }
 
-  // ──────────── 5.  Out-of-Bounds: Axis-Lock + Pull ───────────
     applyFieldBounds(driveCmd, p_x, p_y, kBounds);
 
-  // ──────────── 6.  Notfall: kein Pi-Kontakt ────────────────
-  // if (!got_cmd || (now - slast_cmd_ms) > CMD_TIMEOUT_MS) {
-  //   driveCmd.x *= 0.3f;          // Sanft ausbremsen
-  //   driveCmd.y *= 0.3f;
-  // }
-
-  // ──────────── 7.  Motoren ansteuern ────────────────────────
-
+  float transMag = sqrtf(driveCmd.x * driveCmd.x + driveCmd.y * driveCmd.y);
+  float scaledRot = rotAuth.apply(rotCmd, g_a, transMag); 
 
   if (digitalRead(triggerPin) == HIGH) {
-    Drive.calcDrive(0, 0, -0);
+
+      int motorVRpin[3] = {3, 4, 15}; 
+  int motorHRpin[3] = {5, 6, 19}; 
+  int motorHLpin[3] = {10, 7, 14};
+  int motorVLpin[3] = {12, 11, 18};
+    Drive.setMotor(motorVRpin[0], motorVRpin[1], motorVRpin[2], 0);
+    Drive.setMotor(motorHRpin[0], motorHRpin[1], motorHRpin[2], 0);
+    Drive.setMotor(motorHLpin[0], motorHLpin[1], motorHLpin[2], 0);
+    Drive.setMotor(motorVLpin[0], motorVLpin[1], motorVLpin[2], 0);
   }
 
   else {
-    Drive.calcDrive(driveCmd.x, -driveCmd.y, -rotCmd);
+    Drive.calcDrive(driveCmd.x, driveCmd.y, -scaledRot);
   }
 
     Drive.drive();
+
+
+  
+
+    
 
 
 
 
   // ──────────── 8.  Debug / Teleplot ─────────────────────────
   // Serial.print(">state:");       Serial.println(state);
-  // Serial.print(">p_x:");        Serial.println(p_x);
-  // Serial.print(">p_y:");        Serial.println(p_y);
+  Serial.print(">p_x:");        Serial.println(p_x);
+  Serial.print(">p_y:");        Serial.println(p_y);
   // Serial.print(">ball_valid:"); Serial.println(last_valid);
   // Serial.print(">MOTORVR:");      Serial.println(Drive.getMotorVR());
   // Serial.print(">MOTORHR:");      Serial.println(Drive.getMotorHR());
@@ -368,4 +310,5 @@ void loop() {
 
 
 }
+
 

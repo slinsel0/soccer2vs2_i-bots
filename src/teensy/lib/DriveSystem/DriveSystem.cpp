@@ -18,29 +18,28 @@ namespace {
 
 // setMotor: Steuert einen einzelnen Motor (Richtung und PWM) anhand des Speed-Werts
 void DriveSystem::setMotor(int pinA, int pinB, int pinPWM, int speed) {
-  const int HOLD_PWM = 26;           // hält Treiber „wach“ (wie bei dir)
-  int pwm = abs(speed);
 
-  // if (pwm == 0) {
-  //   // neutral / leichter Hold
-  //   digitalWrite(pinA, HIGH);
-  //   digitalWrite(pinB, LOW);
-  //   analogWrite(pinPWM, HOLD_PWM);
-  //   return;
-  // }
+
 
   // Mindest-PWM gegen Haftreibung
-  if (pwm < minSpeed) pwm = minSpeed;
 
-  if (speed > 0) {
+ if (speed >= minSpeed) {
     digitalWrite(pinA, LOW);
     digitalWrite(pinB, HIGH);
-    analogWrite(pinPWM, pwm);
-  } else {
+    analogWrite(pinPWM, speed);
+  }
+  // Rückwärtsbetrieb
+  else if (speed <= -minSpeed) {
     digitalWrite(pinA, HIGH);
     digitalWrite(pinB, LOW);
-    analogWrite(pinPWM, pwm);
+    analogWrite(pinPWM, abs(speed));
   }
+  else {
+    digitalWrite(pinA, LOW);
+    digitalWrite(pinB, LOW);
+    analogWrite(pinPWM, 0);
+  }
+
 }
 
 
@@ -61,7 +60,8 @@ DriveSystem::DriveSystem() {
 
 
 void DriveSystem::calcDrive(float vX, float vY, float r) {
-  // 1) Rotation begrenzen
+
+  vX *= -1;  // 1) Rotation begrenzen
  if (r > maxRotation) r = maxRotation;
   if (r < (maxRotation * -1)) r = maxRotation * -1;
 
@@ -71,15 +71,19 @@ void DriveSystem::calcDrive(float vX, float vY, float r) {
   motorHL = (int)lrintf(M[2][0]*vX + M[2][1]*vY);
   motorVL = (int)lrintf(M[3][0]*vX + M[3][1]*vY);
 
+
+
+
+  //  int availableSpace = maxSpeed - abs((int)r) - minSpeed;
+  // if (availableSpace < 0) availableSpace = 0; // Fallback
   // 3) Auf maxSpeed skalieren (Verhältnis beibehalten = gleiche Fahrrichtung)
-  int motorMAX = max(max(abs(motorVR), abs(motorHR)), max(abs(motorHL), abs(motorVL)));
+    int motorMAX = max(max(abs(motorVR), abs(motorHR)), max(abs(motorHL), abs(motorVL)));
   if (motorMAX > maxSpeed) {
     motorVR = motorVR * maxSpeed / motorMAX;
     motorHR = motorHR * maxSpeed / motorMAX;
     motorHL = motorHL * maxSpeed / motorMAX;
     motorVL = motorVL * maxSpeed / motorMAX;
   }
-
   // 4) Rotation NACHHER addieren (unabhängig von Translation)
   motorVR += r;
   motorHR += r;

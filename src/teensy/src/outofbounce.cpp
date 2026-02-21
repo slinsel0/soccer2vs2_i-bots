@@ -57,29 +57,26 @@ void applyFieldBounds(Vec2& cmd,
     // Innerhalb der safeLine? → Nichts tun
     if (absPos <= safeLine) return;
 
-    // ── Ausserhalb: Pull + Lock/Escape ──────────────────────
     float overshoot = absPos - safeLine;
     float signPos   = (pos >= 0.0f) ? 1.0f : -1.0f;
 
-    // Pull-Kraft → immer Richtung safeLine (nach innen)
-    //   pos=+80 → signPos=+1 → pullVel=+pullSpeed → zieht zur Mitte ✓
-    //   (Vorzeichen passend zu eurem Drive-System wo cmd=+pos → zur Mitte)
+    // Pull-Kraft → immer Richtung Mitte (entgegengesetzt zur Position)
+    // pos=+80 -> signPos=+1 -> pullVel muss negativ sein, um zur Mitte (-X/-Y) zu fahren.
     float pullSpeed = cfg.kPull * overshoot;
     pullSpeed = clampf(pullSpeed, 0.0f, cfg.maxPull);
-    float pullVel = signPos * pullSpeed;
+    float pullVel = -signPos * pullSpeed;
 
     // Fahrvektor zeigt nach AUSSEN?
-    //   In eurem System: cmd gleiche Richtung wie pos = Richtung Mitte (inward)
-    //   Also outward = cmd hat ANDERES Vorzeichen als pos
-    bool wantsOutward = (velCmd * signPos) < 0.0f;
+    // Outward = velCmd hat dasselbe Vorzeichen wie pos (pos>0 und velCmd>0 -> abhauen)
+    bool wantsOutward = (velCmd * signPos) > 0.0f;
 
     if (wantsOutward) {
-      // LOCK: Outward-Befehl komplett ersetzen durch Pull
+      // LOCK: Outward-Befehl komplett ersetzen durch Pull zur Mitte
       velCmd = pullVel;
-    } else {
-      // ESCAPE: Inward-Befehl bleibt + Pull addiert (Boost)
-      velCmd += pullVel;
-    }
+    } 
+    // ESCAPE: Wenn der Fahrvektor schon nach INNEN zeigt,
+    // machen wir gar nichts. Dadurch kann der Code schneller verlassen werden
+    // und der Bot reißt sich direkt von der Line los, sobald er will.
   };
 
 
