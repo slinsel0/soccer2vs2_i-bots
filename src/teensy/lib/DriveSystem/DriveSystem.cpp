@@ -23,7 +23,7 @@ void DriveSystem::setMotor(int pinA, int pinB, int pinPWM, int speed) {
 
   // Mindest-PWM gegen Haftreibung
 
- if (speed >= minSpeed) {
+  if (speed >= minSpeed) {
     digitalWrite(pinA, LOW);
     digitalWrite(pinB, HIGH);
     analogWrite(pinPWM, speed);
@@ -39,6 +39,7 @@ void DriveSystem::setMotor(int pinA, int pinB, int pinPWM, int speed) {
     digitalWrite(pinB, LOW);
     analogWrite(pinPWM, 0);
   }
+
 
 }
 
@@ -97,11 +98,6 @@ void DriveSystem::calcDrive(float vX, float vY, float r) {
   if (motorHL > 0) motorHL += minSpeed; else motorHL -= minSpeed;
   if (motorVL > 0) motorVL += minSpeed; else motorVL -= minSpeed;
 
-  // 6) Zu kleine Werte auf 0 (Zuckungen vermeiden)
-  if (abs(motorVR) < (minSpeed + 0)) motorVR = 0;
-  if (abs(motorHR) < (minSpeed + 0)) motorHR = 0;
-  if (abs(motorHL) < (minSpeed + 0)) motorHL = 0;
-  if (abs(motorVL) < (minSpeed + 0)) motorVL = 0;
 }
 
 

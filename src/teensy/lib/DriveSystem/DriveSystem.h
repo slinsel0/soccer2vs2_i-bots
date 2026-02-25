@@ -94,10 +94,10 @@ private:
   int   minSpeed = 26;
 
   // Max Translation (PWM-Einheiten)
-  int maxSpeed = 110;
+  int maxSpeed = 120;
 
   // Max Rotation (PWM-Einheiten)
-  int maxRotation = 110;
+  int maxRotation = 80;
 
   // ------------- Pins (je Motor: A, B, PWM) -------------
   int motorVRpin[3] = {3, 4, 15}; 

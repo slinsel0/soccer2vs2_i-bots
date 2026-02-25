@@ -28,19 +28,19 @@ enum RobotState {
 static RobotState state = NO_BALL;
 
 // ─────────────────── Zeitkonstanten (ms) ───────────────────────
-static constexpr uint32_t BALL_LOST_TIMEOUT_MS  = 700;   // nach 300 ms ohne Ball → NO_BALL
-static constexpr uint32_t CMD_TIMEOUT_MS        = 500;   // Kein Paket vom Pi     → Notfall
+static constexpr uint32_t BALL_LOST_TIMEOUT_MS  = 1000;   // nach 300 ms ohne Ball → NO_BALL
+static constexpr uint32_t CMD_TIMEOUT_MS        = 300;   // Kein Paket vom Pi     → Notfall
 
 // ═══════════════════ PID-REGLER ════════════════════════════════
 
-PIDController pidGyro(1.0f, 0.000f, 0.005f, /* dt_ms */ 0, /* iLim */ 25.0f);
+PIDController pidGyro(0.7f, 0.000f, 0.25f, /* dt_ms */ 1, /* iLim */ 25.0f);
 
 
-PIDController pidBallX(0.5f, 0.0f, 0.005f, 0, 0.0f);
-PIDController pidBallY(0.5f, 0.0f, 0.005f, 0, 0.0f);
+PIDController pidBallX(0.375f, 0.0f, 0.005f, 2, 0.0f);
+PIDController pidBallY(0.375f, 0.0f, 0.0f, 2, 0.0f);
 
-PIDController pidCenterX(2.0f, 0.0f, 0.0f, 0, 0.0f);
-PIDController pidCenterY(2.0f, 0.0f, 0.0f, 0, 0.0f);
+PIDController pidCenterX(1.0f, 0.0f, 0.01f, 0, 0.0f);
+PIDController pidCenterY(1.0f, 0.0f, 0.01f, 0, 0.0f);
 
 
 static const BoundsConfig kBounds = {
@@ -64,7 +64,7 @@ static const BoundsConfig kBounds = {
 // ═══════════════════ KAMERA-KONSTANTEN ═════════════════════════
 // offset für kamera guck in src/cam/config.json
 static constexpr float CAM_CENTER_X = 718.0f;
-static constexpr float CAM_CENTER_Y = 570.0f;
+static constexpr float CAM_CENTER_Y = 595.0f;
 
 // ═══════════════════ GLOBALE VARIABLEN ═════════════════════════
 float g_a = 0;           // Gyro angeldegess ausrichtung
@@ -73,8 +73,10 @@ float p_y = 0;           // Roboter-Position Y in cm (Lidar)
 const int kickerPin  = 22;  // Ausgang zur Spule
 const int triggerPin = 13;  // Eingang
 
-
-
+// Kicker status Variablen
+static uint32_t kicker_condition_start_ms = 0;
+static uint32_t last_kick_time_ms = 0;
+static bool     is_kicking = false;
 
 // ─────────────────── COBS Serial Protokoll ─────────────────────
 struct __attribute__((packed)) VectorCmd {
@@ -104,9 +106,13 @@ void onPacketReceived(const uint8_t* buffer, size_t size) {
 
   if (calc != pkt.crc32 || pkt.msg_id != 1) return;
 
-  last_vx    = pkt.vx;
-  last_vy    = pkt.vy;
-  last_valid = pkt.omega;        // 1.0 = Ball da, 0.0 = nicht
+
+  last_valid = pkt.omega;
+  if((last_valid > 0.5f) || millis() > (last_ball_ms + 1000)){
+    last_vx    = pkt.vx;
+    last_vy    = pkt.vy;       // 1.0 = Ball da, 0.0 = nicht
+  }
+
   got_cmd    = true;
   last_cmd_ms = millis();
 
@@ -159,15 +165,15 @@ digitalWrite(kickerPin, LOW);
 static Vec2 computeBehindBallTarget(float ballX, float ballY) {
   Vec2 offset = {0.0f, 0.0f};
   
-  if (ballY > 200.0f) { // wenn der ball vorne ist
+  if (ballY > 0.0f) { // wenn der ball vorne ist
     if (fabsf(ballX) < 100.0f) {
-      offset.x = 0.0f; offset.y = -300.0f;
+      offset.x = 0.0f; offset.y = -0.0f;
     } else {
-      offset.y = 245.0f; // offset damit er nicht direkt drafu fährt 
+      offset.y = 200.0f; // offset damit er nicht direkt drafu fährt 
     }
   } else { // wenn der ball hinten ist 
     offset.x = (ballX < 0.0f) ? -150.0f : 150.0f; 
-    offset.y = 400.0f;
+    offset.y =70.0f;
   }
   return { ballX - offset.x, ballY - offset.y };
 }
@@ -190,12 +196,27 @@ void loop() {
   gyro.update(); 
 
   g_a = gyro.getAngleDegrees();
+  float g_g = gyro.getAngleRadians();
   p_x = Player.x * 0.1f;        // mm → cm
   p_y = Player.y * 0.1f;
 
   const uint32_t now = millis();
 
   float rotCmd = pidGyro.update(g_a);
+
+
+      // Serial.print(">g_a:");    
+      
+      // Serial.println(g_a);
+
+      // Serial.print(">rotCmd:");    
+      
+      // Serial.println(rotCmd);
+
+
+
+
+
 
   bool ballVisible = (last_valid > 0.5f)
                   && (now - last_cmd_ms < CMD_TIMEOUT_MS);
@@ -232,8 +253,8 @@ void loop() {
       float errX = -p_x;
       float errY = -p_y;
 
-      driveCmd.x = pidCenterX.update(errX);
-      driveCmd.y = pidCenterY.update(errY);
+      //driveCmd.x = pidCenterX.update(errX);
+      //driveCmd.y = pidCenterY.update(errY);
 
  
       break;
@@ -253,17 +274,39 @@ void loop() {
       driveCmd.y = pidBallY.update(-v.y);
 
 
-      Serial.print(">ball_bx:");    
+      // Serial.print(">ball_bx:");    
       
-      Serial.println(bx);
-      Serial.print(">ball_by:");      
+      // Serial.println(bx);
+      // Serial.print(">ball_by:");      
       
-      Serial.println(by);
+      // Serial.println(by);
+
+      // Serial.print(">v.x:");    
+      
+      // Serial.println(v.x);
+
+      // Serial.print(">v.y:");    
+      
+      // Serial.println(v.y);
+
+
+
+      // Serial.print(">driveCmd.x:");    
+      
+      // Serial.println(driveCmd.x);
+
+      // Serial.print(">driveCmd.y:");    
+      
+      // Serial.println(driveCmd.y);
+
+
+
+      
       break;
     }
   }
 
-    applyFieldBounds(driveCmd, p_x, p_y, kBounds);
+    //applyFieldBounds(driveCmd, p_x, p_y, kBounds);
 
   float transMag = sqrtf(driveCmd.x * driveCmd.x + driveCmd.y * driveCmd.y);
   float scaledRot = rotAuth.apply(rotCmd, g_a, transMag); 
@@ -281,23 +324,44 @@ void loop() {
   }
 
   else {
-    Drive.calcDrive(driveCmd.x, driveCmd.y, -scaledRot);
+    Drive.calcDrive(driveCmd.x, driveCmd.y, -rotCmd);
+
+    // Drive.calcDriveRotation(driveCmd.x, driveCmd.y, -scaledRot,);
   }
 
     Drive.drive();
 
+  // ──────────── 7.  Kicker Logik ─────────────────────────────
+  // float kick_ballX = CAM_CENTER_X - last_vx;  
+  // float kick_ballY = CAM_CENTER_Y - last_vy;  
 
-  
+  // if (state == CHASE_BALL && ballVisible && fabsf(kick_ballX) < 50.0f && kick_ballY > 5.0f) {
+  //   if (kicker_condition_start_ms == 0) {
+  //     kicker_condition_start_ms = now;
+  //   }
+  // } else {
+  //   kicker_condition_start_ms = 0;
+  // }
 
-    
+  // // Kicker nach 250ms auslösen (max. jede Sekunde)
+  // if (kicker_condition_start_ms != 0 && (now - kicker_condition_start_ms) >= 250) {
+  //   if (!is_kicking && (last_kick_time_ms == 0 || (now - last_kick_time_ms) >= 5000)) {
+  //     is_kicking = true;
+  //     last_kick_time_ms = now;
+  //     digitalWrite(kickerPin, HIGH); // Schiessen (Gate an)
+  //   }
+  // }
 
-
-
+  // // Schutz für das Gate: Maximal 10 ms schießen
+  // if (is_kicking && (now - last_kick_time_ms) >= 10) {
+  //   is_kicking = false;
+  //   digitalWrite(kickerPin, LOW); 
+  // }
 
   // ──────────── 8.  Debug / Teleplot ─────────────────────────
   // Serial.print(">state:");       Serial.println(state);
-  Serial.print(">p_x:");        Serial.println(p_x);
-  Serial.print(">p_y:");        Serial.println(p_y);
+  // Serial.print(">p_x:");        Serial.println(p_x);
+  // Serial.print(">p_y:");        Serial.println(g_a);
   // Serial.print(">ball_valid:"); Serial.println(last_valid);
   // Serial.print(">MOTORVR:");      Serial.println(Drive.getMotorVR());
   // Serial.print(">MOTORHR:");      Serial.println(Drive.getMotorHR());

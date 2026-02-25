@@ -41,24 +41,24 @@
 // ─────────────── Tuning-Struktur (alles an einer Stelle) ─────────
 struct RotAuthConfig {
   // ── Heading-Error Grenzen (Grad) ──
-  float errSmallMax    =  8.0f;   // unter 8° = "klein"
-  float errMediumCenter= 16.0f;   // Zentrum der "mittel"-Glocke
-  float errMediumWidth = 15.0f;   // Breite (Halbwert)
-  float errBigMin      = 25.0f;   // ab 25° = "groß"
+  float errSmallMax    =  14.0f;   // unter 8° = "klein"
+  float errMediumCenter= 37.0f;   // Zentrum der "mittel"-Glocke
+  float errMediumWidth = 40.0f;   // Breite (Halbwert)
+  float errBigMin      = 67.0f;   // ab 25° = "groß"
 
   // ── Speed-Grenzen (PWM-artige Einheiten) ──
-  float speedStoppedMax = 30.0f;  // unter 20 = "steht"
-  float speedSlowCenter = 40.0f;  // Zentrum "langsam"
-  float speedSlowWidth  = 35.0f;  // Breite
+  float speedStoppedMax = 40.0f;  // unter 20 = "steht"
+  float speedSlowCenter = 50.0f;  // Zentrum "langsam"
+  float speedSlowWidth  = 45.0f;  // Breite
   float speedFastMin    = 80.0f;  // ab 60 = "schnell"
 
   // ── Ausgabe-Matrix [speed][error] ──
   //    Zeilen: STOPPED, SLOW, FAST
   //    Spalten: SMALL, MEDIUM, BIG
   float rules[3][3] = {
-    { 0.40f, 0.80f, 1.00f },   // STOPPED
-    { 0.30f, 0.60f, 0.90f },   // SLOW
-    { 0.15f, 0.40f, 0.80f },   // FAST
+    { 0.10f, 0.80f, 1.00f },   // STOPPED
+    { 0.30f, 0.75f, 0.90f },   // SLOW
+    { 0.15f, 0.60f, 0.65f },   // FAST
   };
 
   // ── Minimale Autorität (nie komplett 0) ──

@@ -49,8 +49,8 @@ def run_serial(config, stop_event, result_queue):
                 valid = 1.0
             else:
                 t_us = time.perf_counter_ns() // 1000
-                cx = 0.0
-                cy = 0.0
+                cx = 718
+                cy = 595
                 valid = 0.0
 
             # Packen
