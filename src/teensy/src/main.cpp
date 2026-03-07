@@ -41,11 +41,11 @@ static constexpr float    GOAL_TARGET_Y         = 82.0f; // Y-Ziel: kurz vor Tor
 
 // ═══════════════════ PID-REGLER ════════════════════════════════
 
-PIDController pidGyro(0.85f, 0.000f, 0.32f, /* dt_ms */ 1, /* iLim */ 25.0f);
+PIDController pidGyro(0.85f, 0.000f, 0.22f, /* dt_ms */ 1, /* iLim */ 25.0f);
 
 
-PIDController pidBallX(0.595f, 0.001f, 0.0f, 2, 28.0f);
-PIDController pidBallY(0.595f, 0.001f, 0.0f, 2, 28.0f);
+PIDController pidBallX(0.595f, 0.001f, 0.01f, 2, 28.0f);
+PIDController pidBallY(0.595f, 0.001f, 0.01f, 2, 28.0f);
 
 PIDController pidCenterX(1.5f, 0.0f, 0.2f, 2, 0.0f);
 PIDController pidCenterY(1.5f, 0.0f, 0.2f, 2, 0.0f);
@@ -68,7 +68,7 @@ static const BoundsConfig kBounds = {
 
   // ── Damping & Return Parameter ──
   /* dampingMargin   */  35.0f,    // 10 cm vor der Linie beginnt das Damping
-  /* returnKp        */   8.0f     // Stärke des Zurück-Schiebens ins Feld
+  /* returnKp        */   6.0f     // Stärke des Zurück-Schiebens ins Feld
 };
 
 
