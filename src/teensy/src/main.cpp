@@ -51,24 +51,27 @@ PIDController pidCenterX(1.5f, 0.0f, 0.2f, 2, 0.0f);
 PIDController pidCenterY(1.5f, 0.0f, 0.2f, 2, 0.0f);
 
 
+
+
 static const BoundsConfig kBounds = {
   // ── Feldgrenzen (halbe Maße in cm) ──
-  /* xLimit          */  65.0f,    // 182 / 2
-  /* yLimit          */ 95.5f,    // 243 / 2
+  /* xLimit          */  65.0f,
+  /* yLimit          */ 95.5f,
 
   // ── Tor-Geometrie ──
-  /* goalHalfWidth   */  30.0f,    // 60 / 2
+  /* goalHalfWidth   */  30.0f,
 
   // ── Sicherheitsmargen ──
-  /* safeMarginX     */  3.0f,    // safeLine_X = 91 - 15 = 76 cm
-  /* safeMarginY     */  4.0f,    // safeLine_Y (Wand) = 121.5 - 10 = 111.5 cm
-  /* goalSafeMarginY */  13.0f,    // safeLine_Y (Tor)  = 121.5 - 30 = 91.5 cm
+  /* safeMarginX     */  15.0f,    
+  /* safeMarginY     */  15.0f,    
+  /* goalSafeMarginY */  20.0f,    
 
-
-  // ── Pull-Regler ──
-  /* kPull           */  10.5f,  
-  /* maxPull         */ 150.0f     
+  // ── Damping & Return Parameter ──
+  /* dampingMargin   */  35.0f,    // 10 cm vor der Linie beginnt das Damping
+  /* returnKp        */   8.0f     // Stärke des Zurück-Schiebens ins Feld
 };
+
+
 // ═══════════════════ KAMERA-KONSTANTEN ═════════════════════════
 // offset für kamera guck in src/cam/config.json
 static constexpr float CAM_CENTER_X = 718.0f;
