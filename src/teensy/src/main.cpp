@@ -54,7 +54,7 @@ PIDController pidCenterY(1.5f, 0.0f, 0.2f, 2, 0.0f);
 static const BoundsConfig kBounds = {
   // ── Feldgrenzen (halbe Maße in cm) ──
   /* xLimit          */  65.0f,    // 182 / 2
-  /* yLimit          */ 103.5f,    // 243 / 2
+  /* yLimit          */ 95.5f,    // 243 / 2
 
   // ── Tor-Geometrie ──
   /* goalHalfWidth   */  30.0f,    // 60 / 2
@@ -62,12 +62,12 @@ static const BoundsConfig kBounds = {
   // ── Sicherheitsmargen ──
   /* safeMarginX     */  3.0f,    // safeLine_X = 91 - 15 = 76 cm
   /* safeMarginY     */  4.0f,    // safeLine_Y (Wand) = 121.5 - 10 = 111.5 cm
-  /* goalSafeMarginY */  25.0f,    // safeLine_Y (Tor)  = 121.5 - 30 = 91.5 cm
+  /* goalSafeMarginY */  13.0f,    // safeLine_Y (Tor)  = 121.5 - 30 = 91.5 cm
 
 
   // ── Pull-Regler ──
-  /* kPull           */  2.0f,  
-  /* maxPull         */ 80.0f     
+  /* kPull           */  10.5f,  
+  /* maxPull         */ 150.0f     
 };
 // ═══════════════════ KAMERA-KONSTANTEN ═════════════════════════
 // offset für kamera guck in src/cam/config.json
@@ -245,27 +245,28 @@ void loop() {
   bool ballRecent = (now - last_ball_ms) < BALL_LOST_TIMEOUT_MS;
 
   // ──────────── 2b. IR-Sensor Debounce ──────────────────────────
-  bool ir_raw_low = (digitalRead(ir1_sensor) == LOW);
-  if (ir_raw_low) {
-    ir_high_since = 0;
-    if (ir_low_since == 0) ir_low_since = now;
-    if ((now - ir_low_since) >= IR_DEBOUNCE_LOW_MS) ir_debounced_low = true;
-  } else {
-    ir_low_since = 0;
-    if (ir_high_since == 0) ir_high_since = now;
-    if ((now - ir_high_since) >= IR_DEBOUNCE_HIGH_MS) ir_debounced_low = false;
-  }
+  // bool ir_raw_low = (digitalRead(ir1_sensor) == LOW);
+  // if (ir_raw_low) {
+  //   ir_high_since = 0;
+  //   if (ir_low_since == 0) ir_low_since = now;
+  //   if ((now - ir_low_since) >= IR_DEBOUNCE_LOW_MS) ir_debounced_low = true;
+  // } else {
+  //   ir_low_since = 0;
+  //   if (ir_high_since == 0) ir_high_since = now;
+  //   if ((now - ir_high_since) >= IR_DEBOUNCE_HIGH_MS) ir_debounced_low = false;
+  // }
 
   // ──────────── 3.  State-Übergänge ─────────────────────────
   switch (state) {
 
     case NO_BALL:
-      if (ir_debounced_low) {
-        // Ball in Kuhle aber Kamera sieht nichts → direkt zum Tor
-        state = DRIVE_TO_GOAL;
-        pidCenterX.reset();
-        pidCenterY.reset();
-      } else if (ballVisible) {
+      // if (ir_debounced_low) {
+      //   // Ball in Kuhle aber Kamera sieht nichts → direkt zum Tor
+      //   state = DRIVE_TO_GOAL;
+      //   pidCenterX.reset();
+      //   pidCenterY.reset();
+      // } 
+       if (ballVisible) {
         state = CHASE_BALL;
         pidBallX.reset();          // kein Integral-Altlast
         pidBallY.reset();
@@ -285,13 +286,13 @@ void loop() {
       }
       break;
 
-    case DRIVE_TO_GOAL:
-      if (!ir_debounced_low) {
-        // Ball ist raus → Kamera übernimmt wieder
-        state = CHASE_BALL;
-        pidBallX.reset();
-        pidBallY.reset();
-       } 
+    // case DRIVE_TO_GOAL:
+    //   if (!ir_debounced_low) {
+    //     // Ball ist raus → Kamera übernimmt wieder
+    //     state = CHASE_BALL;
+    //     pidBallX.reset();
+    //     pidBallY.reset();
+    //    } 
       //  else if (p_y >= GOAL_TARGET_Y &&
       //            fabsf(p_y - GOAL_TARGET_Y) < GOAL_ARRIVED_DIST) {
       //   // Am Tor angekommen → Ball abgegeben
@@ -299,7 +300,7 @@ void loop() {
       //   pidCenterX.reset();
       //   pidCenterY.reset();
       // }
-      break;
+      // break;
   }
 
   // ──────────── 4.  Fahrbefehl berechnen ─────────────────────
@@ -334,27 +335,27 @@ void loop() {
       break;
     }
 
-    case DRIVE_TO_GOAL: {
+    // case DRIVE_TO_GOAL: {
 
 
-      // X → Feldmitte (zentriert aufs Tor zufahren)
-      // Y → Richtung gegnerisches Tor
-      float errX = 0.0f - p_x;
-      float errY = GOAL_TARGET_Y - p_y;   
+    //   // X → Feldmitte (zentriert aufs Tor zufahren)
+    //   // Y → Richtung gegnerisches Tor
+    //   float errX = 0.0f - p_x;
+    //   float errY = GOAL_TARGET_Y - p_y;   
 
-      driveCmd.x = pidCenterX.update(errX*1.5f);
-      driveCmd.y = pidCenterY.update(-errY);
+    //   driveCmd.x = pidCenterX.update(errX*1.5f);
+    //   driveCmd.y = pidCenterY.update(-errY);
 
-      // Zielwinkel in Grad (0° = +Y Richtung, positiv = rechts)
-      float goalAngleDeg = atan2f(errX, errY) * (180.0f / PI);
-      // Heading-Fehler: Differenz zwischen Soll und Ist
-      float headingErr = goalAngleDeg - g_a;
+    //   // Zielwinkel in Grad (0° = +Y Richtung, positiv = rechts)
+    //   float goalAngleDeg = atan2f(errX, errY) * (180.0f / PI);
+    //   // Heading-Fehler: Differenz zwischen Soll und Ist
+    //   float headingErr = goalAngleDeg - g_a;
  
-       rotCmd = pidGyro.update(-headingErr);
+    //    rotCmd = pidGyro.update(-headingErr);
 
 
-      break;
-    }
+    //   break;
+    // }
   }
 
     applyFieldBounds(driveCmd, p_x, p_y, kBounds);

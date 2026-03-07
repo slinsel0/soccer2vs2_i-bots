@@ -25,12 +25,17 @@ public:
     // Addiert eine kleine Korrektur (für kontinuierlichen Drift-Fix durch LiDAR)
     void adjustOffset(float deltaDeg);
 
+    float getAccelX() const;
+    float getAccelY() const;
+
 private:
    Adafruit_BNO08x  bno08x;
     float gyroDegrees;
     float gyroRadiants;
     
     float angleOffset; // Der Korrekturwert
+    float accelX;
+    float accelY;
 };
 extern GyroSystem gyro;
 

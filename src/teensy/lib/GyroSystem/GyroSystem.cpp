@@ -81,7 +81,15 @@ void GyroSystem::update()
                 gyroRadiants = gyroDegrees * PI / 180.0f;
                 break;
             }
+            case SH2_LINEAR_ACCELERATION: {
+                // Die Werte kommen in m/s^2
+                accelX = sensorValue.un.linearAcceleration.x;
+                accelY = sensorValue.un.linearAcceleration.y;
+                break;
+            }
         }
+
+
     }
 }
 
@@ -93,6 +101,14 @@ float GyroSystem::getAngleDegrees() const
 float GyroSystem::getAngleRadians() const
 {
     return gyroRadiants;
+}
+
+float GyroSystem::getAccelX() const {
+    return accelX;
+}
+
+float GyroSystem::getAccelY() const {
+    return accelY;
 }
 
 // Setzt einen harten neuen Nullpunkt (z.B. per Knopfdruck)

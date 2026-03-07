@@ -4,6 +4,9 @@
 
 #include "Arduino.h"
 #include "LD19.h"
+#include "GyroSystem.h"
+
+extern GyroSystem gyro;
 
 LD19::LD19()
 {
@@ -51,6 +54,15 @@ void LD19::loop()
 }
 
 // Hilfsfunktion zum Verarbeiten eines kompletten Pakets
+#include "Arduino.h"
+#include "LD19.h"
+#include "GyroSystem.h" // <-- NEU: Gyro einbinden
+
+extern GyroSystem gyro; // <-- NEU: Globale Gyro-Instanz holen
+
+// ... [begin() und loop() bleiben unverändert] ...
+
+// Hilfsfunktion zum Verarbeiten eines kompletten Pakets
 void LD19::processPacket() 
 {
     // 1. CRC Check
@@ -67,6 +79,9 @@ void LD19::processPacket()
 
     // Winkel-Differenz korrigieren
     uint16_t angleDiff = (endAngle >= startAngle) ? (endAngle - startAngle) : ((endAngle + 36000) - startAngle);
+    
+    // NEU: Exakten Gyro-Winkel JETZT für diese 12 Punkte holen
+    float current_robot_angle = gyro.getAngleRadians(); 
     
     for (int i = 0; i < 12; i++)
     {
@@ -85,6 +100,9 @@ void LD19::processPacket()
         lidar_points[current_point_cloud_position].x = sinf(rad) * dist;
         lidar_points[current_point_cloud_position].y = cosf(rad) * dist;
         lidar_points[current_point_cloud_position].intensity = intens;
+        
+        // NEU: Winkel abspeichern!
+        lidar_points[current_point_cloud_position].robot_angle_rad = current_robot_angle; 
     }
 }
 

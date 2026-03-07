@@ -25,10 +25,11 @@ class LD19
     void begin(HardwareSerial* _port, bool _debug);
     void loop();
 
-    struct lidarPointVec {
-      float x; // Geändert auf float für Teensy FPU Performance
+struct lidarPointVec {
+      float x; 
       float y;
       uint8_t intensity;
+      float robot_angle_rad; // <-- NEU: Gyro-Winkel zum Zeitpunkt der Messung
     };
     
     lidarPointVec lidar_points[POINTCLOUD_SIZE];
