@@ -1,0 +1,169 @@
+#include "LidarProcessing.h"
+#include <math.h>
+#include <vector>
+#include "GyroSystem.h"
+#include "LD19.h"
+
+// --- KONFIGURATION ---
+#define LIDAR_MOUNT_OFFSET_X 0.0f  
+#define LIDAR_MOUNT_OFFSET_Y 0.0f 
+
+#define MIN_VALID_POINTS 10
+#define WALL_VOTE_THRESHOLD 10  // Mindestanzahl an LiDAR-Punkten, damit eine Wand als "echt" gilt
+
+// --- 1D-Hough / Histogramm Konfiguration ---
+// 20 mm pro Eimer ist ein exzellenter Kompromiss aus Auflösung und Toleranz für Rauschen
+#define HIST_BIN_SIZE 20.0f    
+#define HIST_MAX_DIST 3000.0f  // 3000 mm maximale Tracking-Distanz
+#define HIST_BINS (int)(HIST_MAX_DIST / HIST_BIN_SIZE)
+
+// --- Globale Variablen ---
+Vec2 Player = {0.0f, 0.0f};
+
+// LiDAR Instanz
+LD19 lidarsensor;
+extern GyroSystem gyro;
+
+void LidarBegin() {
+  lidarsensor.begin(&Serial1);
+}
+
+/**
+ * Sucht in einem Histogramm nach dem Eimer (Bin) mit den meisten Stimmen.
+ * Gibt die Distanz in mm zurück (Mitte des Eimers) oder -1, wenn keine Wand gefunden wurde.
+ */
+float findHistogramPeak(int* hist, int bins, float binSize, int& maxVotes) {
+    maxVotes = 0;
+    int bestBin = -1;
+    
+    for (int i = 0; i < bins; i++) {
+        if (hist[i] > maxVotes) {
+            maxVotes = hist[i];
+            bestBin = i;
+        }
+    }
+    
+    // Prüfen, ob der Peak stark genug ist (Outlier-Unterdrückung)
+    if (bestBin >= 0 && maxVotes >= WALL_VOTE_THRESHOLD) {
+        // Die Mitte des Eimers als Distanz zurückgeben
+        return (bestBin * binSize) + (binSize / 2.0f);
+    }
+    return -1.0f; // Keine valide Wand
+}
+
+/**
+ * Kernfunktion zur Positionsbestimmung mit Histogramm-Voting.
+ * Extrem resistent gegen Gegner und den Ball (Outliers).
+ */
+void processLidarData() {
+  // 1. Gyro Daten holen
+  double angleRadians = gyro.getAngleRadians();
+  double cosTheta = cos(angleRadians);
+  double sinTheta = sin(angleRadians);
+
+  float fieldHalfX = FIELD_X_MM / 2.0f;
+  float fieldHalfY = FIELD_Y_MM / 2.0f;
+
+  // 2. Histogramme (Akkumulatoren) initialisieren (alles auf 0)
+  int histX_pos[HIST_BINS] = {0}; // Rechte Wand (X > 0)
+  int histX_neg[HIST_BINS] = {0}; // Linke Wand (X < 0)
+  int histY_pos[HIST_BINS] = {0}; // Obere Wand (Y > 0)
+  int histY_neg[HIST_BINS] = {0}; // Untere Wand (Y < 0)
+
+  int validPoints = 0;
+
+  // 3. Punkte iterieren und abstimmen lassen (Voting)
+  for (int i = 0; i < POINTCLOUD_SIZE; i++) {
+    double x = lidarsensor.lidar_points[i].y; 
+    double y = lidarsensor.lidar_points[i].x;
+    
+    if (x == 0 && y == 0) continue;
+
+    double distSq = x*x + y*y;
+    if (distSq < 150*150) continue;    // Blindzone 15cm
+    if (distSq > 2600*2600) continue;  // Max Range 2.6m
+    
+    // Rotation in Welt-Koordinaten
+    double xRotated = x * cosTheta - y * sinTheta;
+    double yRotated = x * sinTheta + y * cosTheta;
+    
+    // Lidar -> Roboter System (inkl. Mount Offset)
+    double xRobotFrame = yRotated + LIDAR_MOUNT_OFFSET_X;
+    double yRobotFrame = xRotated * (-1) + LIDAR_MOUNT_OFFSET_Y;
+
+    float rotX = (float)xRobotFrame;
+    float rotY = (float)yRobotFrame;
+
+    // Einordnen in die Histogramm-Eimer (Voting)
+    if (rotX > 0 && rotX < HIST_MAX_DIST) {
+        int bin = (int)(rotX / HIST_BIN_SIZE);
+        if (bin < HIST_BINS) histX_pos[bin]++;
+    } else if (rotX < 0 && -rotX < HIST_MAX_DIST) {
+        int bin = (int)(-rotX / HIST_BIN_SIZE);
+        if (bin < HIST_BINS) histX_neg[bin]++;
+    }
+
+    if (rotY > 0 && rotY < HIST_MAX_DIST) {
+        int bin = (int)(rotY / HIST_BIN_SIZE);
+        if (bin < HIST_BINS) histY_pos[bin]++;
+    } else if (rotY < 0 && -rotY < HIST_MAX_DIST) {
+        int bin = (int)(-rotY / HIST_BIN_SIZE);
+        if (bin < HIST_BINS) histY_neg[bin]++;
+    }
+
+    validPoints++;
+  }
+
+  if (validPoints < MIN_VALID_POINTS) return;
+
+  // 4. Stärkste Wände (Peaks) im Histogramm finden
+  int votesRight, votesLeft, votesTop, votesBottom;
+  float distRight  = findHistogramPeak(histX_pos, HIST_BINS, HIST_BIN_SIZE, votesRight);
+  float distLeft   = findHistogramPeak(histX_neg, HIST_BINS, HIST_BIN_SIZE, votesLeft);
+  float distTop    = findHistogramPeak(histY_pos, HIST_BINS, HIST_BIN_SIZE, votesTop);
+  float distBottom = findHistogramPeak(histY_neg, HIST_BINS, HIST_BIN_SIZE, votesBottom);
+
+  // 5. Roboterposition clever berechnen
+  // Wir nutzen den alten Wert als Fallback, falls mal gar keine Wände gesehen werden (z.B. weil 4 Bots um uns stehen)
+  float estX = Player.x; 
+  float estY = Player.y;
+  
+  // X-Achse
+  int validXCount = 0;
+  float sumX = 0;
+  if (distRight > 0) { // Rechte Wand gesehen
+      sumX += (fieldHalfX - distRight);
+      validXCount++;
+  }
+  if (distLeft > 0) {  // Linke Wand gesehen (distLeft ist durch den Index bereits positiv!)
+      sumX += (-fieldHalfX + distLeft); 
+      validXCount++;
+  }
+  if (validXCount > 0) {
+      estX = sumX / validXCount; // Wenn beide gesehen werden, wird der Fehler gemittelt!
+  }
+
+  // Y-Achse
+  int validYCount = 0;
+  float sumY = 0;
+  if (distTop > 0) {
+      sumY += (fieldHalfY - distTop);
+      validYCount++;
+  }
+  if (distBottom > 0) {
+      sumY += (-fieldHalfY + distBottom);
+      validYCount++;
+  }
+  if (validYCount > 0) {
+      estY = sumY / validYCount;
+  }
+
+  // Sicherheit: Im Feld bleiben
+  Player.x = constrain(estX, -fieldHalfX, fieldHalfX);
+  Player.y = constrain(estY, -fieldHalfY, fieldHalfY);
+}
+
+void lidaar() {
+  lidarsensor.loop();
+  processLidarData();
+}

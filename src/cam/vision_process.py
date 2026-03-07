@@ -5,6 +5,7 @@ import cv2
 import time
 import traceback
 from geometry import GeometryTransformer
+from collections import deque
 
 def run_vision(config, stop_event, frame_ready_event, result_queue):
     """
@@ -23,6 +24,9 @@ def run_vision(config, stop_event, frame_ready_event, result_queue):
         shm = None
         existing_shm = False
         print("[VIS] Warte auf Shared Memory Verbindung...")
+
+
+  
         
         while not stop_event.is_set():
             try:
@@ -66,6 +70,9 @@ def run_vision(config, stop_event, frame_ready_event, result_queue):
 
         print("[VIS] Vision Loop gestartet.")
 
+
+        ball_history = deque(maxlen=5)
+        PREDICTION_TIME_SEC = 0.15
         while not stop_event.is_set():
             # Warten auf Signal von der Kamera (Timeout damit wir stop_event prüfen können)
             if not frame_ready_event.wait(timeout=1.0):
@@ -114,13 +121,30 @@ def run_vision(config, stop_event, frame_ready_event, result_queue):
             if best_ball is not None:
                 M = cv2.moments(best_ball)
                 if M['m00'] != 0:
-                    cx = M['m10'] / M['m00']
-                    cy = M['m01'] / M['m00']
-                    res_dist, res_angle = geo.pixel_to_polar(cx, cy)
-                    found = True
+                    ccx = M['m10'] / M['m00']
+                    ccy = M['m01'] / M['m00']
+                    res_dist, res_angle = geo.pixel_to_polar(ccx, ccy)
+                    current_time = time.perf_counter()
                     #print(f"[VIS] Ball gefunden: D={res_dist:.2f}px, A={res_angle:.2f}°")
                     #print(cx, cy)
-                    
+                    ball_history.append((current_time, ccx, ccy))
+                    vx, vy = 0.0, 0.0
+                    if len(ball_history) >= 2:
+                        # Wir vergleichen aktuellen Punkt mit dem ältesten im Puffer
+                        dt = current_time - ball_history[0][0]
+                        if dt > 0:
+                            vx = (ccx - ball_history[0][1]) / dt
+                            vy = (ccy - ball_history[0][2]) / dt
+            
+                    pred_x = ccx + (vx * PREDICTION_TIME_SEC)
+                    pred_y = ccy + (vy * PREDICTION_TIME_SEC)
+                    cx, cy = pred_x, pred_y
+
+                    pred_dist_px = np.sqrt(pred_x**2 + pred_y**2)
+                    pred_angle_rad = np.arctan2(pred_x, pred_y)
+
+                    found = True
+
                     payload = {
                         'found': True, 'cx': cx, 'cy': cy,
                         't_us': time.perf_counter_ns() // 1000
@@ -128,7 +152,8 @@ def run_vision(config, stop_event, frame_ready_event, result_queue):
                     if not result_queue.full():
                         result_queue.put(payload)
             else:
-                 if not result_queue.full():
+                ball_history.clear()
+                if not result_queue.full():
                     result_queue.put({'found': False})
 
             # --- Visualisierung (Nur wenn aktiviert) ---
@@ -142,6 +167,16 @@ def run_vision(config, stop_event, frame_ready_event, result_queue):
                     cv2.circle(vis_frame, (geo.cx, geo.cy), geo.r_outer, (255, 0, 0), 1)
 
                     if found and best_ball is not None and M is not None:
+
+                        draw_pred_x = int(geo.cx + pred_x)
+                        draw_pred_y = int(geo.cy - pred_y)
+                        ball_center = (int(cx), int(cy))
+                        
+                        # Rote Linie: Wohin rollt der Ball?
+                        cv2.line(vis_frame, ball_center, (draw_pred_x, draw_pred_y), (0, 0, 255), 2)
+                        # Roter Kreis: Vorhergesagte Position
+                        cv2.circle(vis_frame, (draw_pred_x, draw_pred_y), 5, (0, 0, 255))
+                        
                         # Zeichne Ball Kontur
                         cv2.drawContours(vis_frame, [best_ball], -1, (0, 255, 0), 2)
                         # Zeichne Linie zum Ball

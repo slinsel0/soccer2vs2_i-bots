@@ -19,26 +19,27 @@ namespace {
 // setMotor: Steuert einen einzelnen Motor (Richtung und PWM) anhand des Speed-Werts
 void DriveSystem::setMotor(int pinA, int pinB, int pinPWM, int speed) {
 
-
+if (speed == 0) {
+    digitalWrite(pinA, LOW);
+    digitalWrite(pinB, HIGH);
+    analogWrite(pinPWM, 25.5f);      // 10% PWM halten um Out-of-Range Fehler zu vermeiden
+    return;
+  }
 
   // Mindest-PWM gegen Haftreibung
 
-  if (speed >= minSpeed) {
+  if (speed > 0) {
     digitalWrite(pinA, LOW);
     digitalWrite(pinB, HIGH);
     analogWrite(pinPWM, speed);
   }
   // Rückwärtsbetrieb
-  else if (speed <= -minSpeed) {
+  else  {
     digitalWrite(pinA, HIGH);
     digitalWrite(pinB, LOW);
     analogWrite(pinPWM, abs(speed));
   }
-  else {
-    digitalWrite(pinA, LOW);
-    digitalWrite(pinB, LOW);
-    analogWrite(pinPWM, 0);
-  }
+
 
 
 }
@@ -93,10 +94,10 @@ void DriveSystem::calcDrive(float vX, float vY, float r) {
 
 
   // 5) minSpeed Offset (Treiber-Totzone überwinden)
-  if (motorVR > 0) motorVR += minSpeed; else motorVR -= minSpeed;
-  if (motorHR > 0) motorHR += minSpeed; else motorHR -= minSpeed;
-  if (motorHL > 0) motorHL += minSpeed; else motorHL -= minSpeed;
-  if (motorVL > 0) motorVL += minSpeed; else motorVL -= minSpeed;
+  if (motorVR > 0) motorVR += minSpeed; else if (motorVR < 0) motorVR -= minSpeed;
+  if (motorHR > 0) motorHR += minSpeed; else if (motorHR < 0) motorHR -= minSpeed;
+  if (motorHL > 0) motorHL += minSpeed; else if (motorHL < 0) motorHL -= minSpeed;
+  if (motorVL > 0) motorVL += minSpeed; else if (motorVL < 0) motorVL -= minSpeed;
 
 }
 

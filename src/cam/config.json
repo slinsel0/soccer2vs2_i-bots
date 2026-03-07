@@ -17,12 +17,12 @@
     "vision": {
         "debug_view": true,
         "ball": {
-            "h_min": 1,
-            "h_max": 11,
-            "s_min": 204,
+            "h_min": 2,
+            "h_max": 19,
+            "s_min": 245,
             "s_max": 255,
-            "v_min": 104,
-            "v_max": 203,
+            "v_min": 106,
+            "v_max": 253,
             "min_area_px": 5,
             "max_area_px": 5000,
             "min_circularity": 0.1

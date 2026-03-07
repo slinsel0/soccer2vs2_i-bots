@@ -10,7 +10,7 @@
 #define LIDAR_MOUNT_OFFSET_Y 0.0f 
 
 // Mindestanzahl gültiger Punkte für eine Positionsberechnung
-#define MIN_VALID_POINTS 10
+#define MIN_VALID_POINTS 1
 
 // --- Globale Variablen ---
 Vec2 Player = {0.0f, 0.0f};
@@ -61,7 +61,7 @@ void processLidarData() {
 
     // Distanz Filter
     double distSq = x*x + y*y;
-    if (distSq < 150*150) continue;   // Blindzone 15cm
+    if (distSq < 50*50) continue;   // Blindzone 15cm
     if (distSq > 2600*2600) continue;  // Max Range 3m
     
     // if (lidarsensor.lidar_points[i].intensity < 100) continue; 
