@@ -11,7 +11,10 @@
 #include <math.h>
 #include <outofbounce.h>
 #include "Rotationauthority .h"
+#include "keeper.h"
+#include <Servo.h>
 
+Servo dribbler;
 COBSPacketSerial cobsSerial;
 FastCRC32        CRC32;
 GyroSystem       gyro;
@@ -44,31 +47,31 @@ static constexpr float    GOAL_TARGET_Y         = 82.0f; // Y-Ziel: kurz vor Tor
 PIDController pidGyro(0.85f, 0.000f, 0.22f, /* dt_ms */ 1, /* iLim */ 25.0f);
 
 
-PIDController pidBallX(0.595f, 0.001f, 0.01f, 2, 28.0f);
-PIDController pidBallY(0.595f, 0.001f, 0.01f, 2, 28.0f);
+PIDController pidBallX(0.6f, 0.004f, 0.02f, 2, 28.0f);
+PIDController pidBallY(0.6f, 0.004f, 0.02f, 2, 28.0f);
 
-PIDController pidCenterX(1.5f, 0.0f, 0.2f, 2, 0.0f);
-PIDController pidCenterY(1.5f, 0.0f, 0.2f, 2, 0.0f);
+PIDController pidCenterX(1.8f, 0.0f, 0.2f, 2, 0.0f);
+PIDController pidCenterY(1.8f, 0.0f, 0.2f, 2, 0.0f);
 
 
 
 
 static const BoundsConfig kBounds = {
   // ── Feldgrenzen (halbe Maße in cm) ──
-  /* xLimit          */  65.0f,
+  /* xLimit          */  70.0f,
   /* yLimit          */ 95.5f,
 
   // ── Tor-Geometrie ──
   /* goalHalfWidth   */  30.0f,
 
   // ── Sicherheitsmargen ──
-  /* safeMarginX     */  15.0f,    
-  /* safeMarginY     */  15.0f,    
-  /* goalSafeMarginY */  20.0f,    
+  /* safeMarginX     */  5.0f,    
+  /* safeMarginY     */  8.0f,    
+  /* goalSafeMarginY */  22.0f,    
 
   // ── Damping & Return Parameter ──
-  /* dampingMargin   */  35.0f,    // 10 cm vor der Linie beginnt das Damping
-  /* returnKp        */   6.0f     // Stärke des Zurück-Schiebens ins Feld
+  /* dampingMargin   */  25.0f,    // 10 cm vor der Linie beginnt das Damping
+  /* returnKp        */   4.0f     // Stärke des Zurück-Schiebens ins Feld
 };
 
 
@@ -85,10 +88,16 @@ const int kickerPin  = 22;  // Ausgang zur Spule
 const int triggerPin = 13;  // Eingang
 const int ir1_sensor = 23;   // Eingang
 
+ int dribblerPin = 2;
 // Kicker status Variablen
-static uint32_t kicker_condition_start_ms = 0;
 static uint32_t last_kick_time_ms = 0;
 static bool     is_kicking = false;
+static uint32_t kick_start_ms    = 0;
+
+// Kicker Konstanten
+static constexpr uint32_t KICK_GATE_MS       = 10;    // Gate max 10 ms offen
+static constexpr uint32_t KICK_COOLDOWN_MS   = 1000;  // nur 1× pro Sekunde kicken
+static constexpr float    KICK_BALL_THRESH   = 400.0f; // |bx|<50 && |by|<50 → Ball in Kuhle
 
 // IR-Sensor Debounce Variablen
 static uint32_t ir_low_since      = 0;
@@ -150,11 +159,12 @@ void onPacketReceived(const uint8_t* buffer, size_t size) {
 
 
 void setup() {
- Serial.begin(2000000);
+  Serial.begin(2000000);
   cobsSerial.setStream(&Serial);
   cobsSerial.setPacketHandler(&onPacketReceived);
 
   gyro.begin();
+  
   LidarBegin();
 
   pinMode(triggerPin, INPUT_PULLUP);
@@ -162,7 +172,33 @@ void setup() {
 
 pinMode(kickerPin, OUTPUT);
 
+
 digitalWrite(kickerPin, LOW);
+
+// digitalWrite(kickerPin, HIGH);
+// delay(15);
+// digitalWrite(kickerPin, LOW);
+
+// dribbler.attach(2);
+
+//   // ESC initial auf Minimum setzen
+//   dribbler.writeMicroseconds(1000);
+//    delay(3000);  // Zeit zum Armen / Initialisieren
+//     delay(3000);
+
+//     dribbler.writeMicroseconds(1145);
+//     delay(3000);
+  
+
+  // delay(2000);
+
+  // // wieder runter
+  // for (int pwm = 1600; pwm >= 1000; pwm -= 10) {
+  //   dribbler.writeMicroseconds(pwm);
+  //   delay(50);
+  // }
+
+  // delay(2000);
 
 
 
@@ -208,6 +244,11 @@ static Vec2 computeBehindBallTarget(float ballX, float ballY) {
 //                          LOOP
 // ═══════════════════════════════════════════════════════════════
 void loop() {
+
+
+
+    if (digitalRead(triggerPin) == LOW) {
+
 
   // ──────────── 0.  Sensor-Updates ────────────────────────────
   cobsSerial.update(); // serielle kommunkation between pi 5 and teensy 4.1
@@ -329,11 +370,35 @@ void loop() {
 
       Vec2 v = computeBehindBallTarget(-bx, -by);
 
+      Vec2 ball = {bx, by};
+
+      Vec2 Player = {p_x, p_y};
+
+      // Vec2 v = keeper(Player,ball);
+
       driveCmd.x = pidBallX.update(-v.x);
       driveCmd.y = pidBallY.update(-v.y);
 
       rotCmd = pidGyro.update(g_a);
 
+      // ── Kick-Logik: Ball in Kuhle per Koordinaten ──────────
+      bool ballInKuhle = (fabsf(bx) < KICK_BALL_THRESH)
+                      && (fabsf(by) < KICK_BALL_THRESH);
+
+      if (is_kicking) {
+        // Gate nach 10 ms wieder schließen
+        if ((now - kick_start_ms) >= KICK_GATE_MS) {
+          digitalWrite(kickerPin, LOW);
+          is_kicking = false;
+        }
+      } else if (ballInKuhle
+              && (now - last_kick_time_ms) >= KICK_COOLDOWN_MS) {
+        // Kick auslösen
+        digitalWrite(kickerPin, HIGH);
+        is_kicking      = true;
+        kick_start_ms   = now;
+        last_kick_time_ms = now;
+      }
 
       break;
     }
@@ -366,23 +431,6 @@ void loop() {
   // float transMag = sqrtf(driveCmd.x * driveCmd.x + driveCmd.y * driveCmd.y);
   // float scaledRot = rotAuth.apply(goalRotCmd, g_a, transMag); 
 
-  if (digitalRead(triggerPin) == HIGH) {
-
-      int motorVRpin[3] = {3, 4, 15}; 
-  int motorHRpin[3] = {5, 6, 19}; 
-  int motorHLpin[3] = {10, 7, 14};
-  int motorVLpin[3] = {12, 11, 18};
-    Drive.setMotor(motorVRpin[0], motorVRpin[1], motorVRpin[2], 255);
-    Drive.setMotor(motorHRpin[0], motorHRpin[1], motorHRpin[2], 255);
-    Drive.setMotor(motorHLpin[0], motorHLpin[1], motorHLpin[2], 255);
-    Drive.setMotor(motorVLpin[0], motorVLpin[1], motorVLpin[2], 255);
-
-
-
- 
-  }
-
-  else {
 
     if (state == DRIVE_TO_GOAL){
 
@@ -394,37 +442,36 @@ void loop() {
     }
         Drive.drive();
 
+    }
 
-    // Drive.calcDriveRotation(driveCmd.x, driveCmd.y, -scaledRot,);
+
+    else {
+      
+    int motorVRpin[3] = {3, 4, 15}; 
+  int motorHRpin[3] = {5, 6, 19}; 
+  int motorHLpin[3] = {10, 7, 14};
+  int motorVLpin[3] = {12, 11, 18};
+    // Drive.setMotor(motorVRpin[0], motorVRpin[1], motorVRpin[2], 255);
+    // Drive.setMotor(motorHRpin[0], motorHRpin[1], motorHRpin[2], 255);
+    // Drive.setMotor(motorHLpin[0], motorHLpin[1], motorHLpin[2], 255);
+    // Drive.setMotor(motorVLpin[0], motorVLpin[1], motorVLpin[2], 255);
+
+
+    for (int i = 0; i < 3; i++) {
+         digitalWrite(motorVRpin[i], LOW);
+         digitalWrite(motorHRpin[i], LOW);
+         digitalWrite(motorHLpin[i], LOW);
+         digitalWrite(motorVLpin[i], LOW);
+    }
+
+ 
   }
 
+    // Drive.calcDriveRotation(driveCmd.x, driveCmd.y, -scaledRot,);
+  
 
-  // ──────────── 7.  Kicker Logik ─────────────────────────────
-  // float kick_ballX = CAM_CENTER_X - last_vx;  
-  // float kick_ballY = CAM_CENTER_Y - last_vy;  
 
-  // if (state == CHASE_BALL && ballVisible && fabsf(kick_ballX) < 50.0f && kick_ballY > 5.0f) {
-  //   if (kicker_condition_start_ms == 0) {
-  //     kicker_condition_start_ms = now;
-  //   }
-  // } else {
-  //   kicker_condition_start_ms = 0;
-  // }
 
-  // // Kicker nach 250ms auslösen (max. jede Sekunde)
-  // if (kicker_condition_start_ms != 0 && (now - kicker_condition_start_ms) >= 250) {
-  //   if (!is_kicking && (last_kick_time_ms == 0 || (now - last_kick_time_ms) >= 5000)) {
-  //     is_kicking = true;
-  //     last_kick_time_ms = now;
-  //     digitalWrite(kickerPin, HIGH); // Schiessen (Gate an)
-  //   }
-  // }
-
-  // // Schutz für das Gate: Maximal 10 ms schießen
-  // if (is_kicking && (now - last_kick_time_ms) >= 10) {
-  //   is_kicking = false;
-  //   digitalWrite(kickerPin, LOW); 
-  // }
 
   // ──────────── 8.  Debug / Teleplot ─────────────────────────
   Serial.print(">state:");       Serial.println(state);

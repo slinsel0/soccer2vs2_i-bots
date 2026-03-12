@@ -25,7 +25,7 @@ void GyroSystem::begin()
 
     Serial.println("BNO08x gefunden!");
 
-    if (!bno08x.enableReport(SH2_GAME_ROTATION_VECTOR, 100)) { 
+    if (!bno08x.enableReport(SH2_GAME_ROTATION_VECTOR, 2500)) { 
         Serial.println("Konnte Game Rotation Vector nicht aktivieren");
     }
 }

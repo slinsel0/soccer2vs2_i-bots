@@ -1,35 +1,25 @@
-// #pragma once
+#pragma once
 
-// #ifndef SAFETY_VEC2_DEFINED
-// #define SAFETY_VEC2_DEFINED 1
-// struct Vec2 {
-//     float x;
-//     float y;
+#ifndef SAFETY_VEC2_DEFINED
+#define SAFETY_VEC2_DEFINED 1
 
+struct Vec2 {
+    float x;
+    float y;
 
-//     Vec2 operator-(const Vec2 &other) const {
-//         return { x - other.x, y - other.y };
-//     }
+    Vec2 operator-(const Vec2 &other) const {
+        return { x - other.x, y - other.y };
+    }
 
-//     Vec2 operator+(const Vec2 &other) const {
-//         return { x + other.x, y + other.y };
-//     }
+    Vec2 operator+(const Vec2 &other) const {
+        return { x + other.x, y + other.y };
+    }
 
-//     Vec2 operator/(float s) const {
-//         return { x / s, y / s };
-//     }
-    
-//     Vec2 pow(float exponent) const {
-//         return { std::pow(x, exponent), std::pow(y, exponent) };
-//     }
-    
-//     Vec2 sqrtComponents() const {
-//         return { std::sqrt(x), std::sqrt(y) };
-//     }
-    
-// };
-// #endif
+    Vec2 operator/(float s) const {
+        return { x / s, y / s };
+    }
+};
 
-// void keeper (Vec2 player,Vec2 ball);
+#endif
 
-// void json_extraction ();
+Vec2 keeper(Vec2 Player, Vec2 ball);   // ← nur Deklaration

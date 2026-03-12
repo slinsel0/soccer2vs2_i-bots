@@ -5,7 +5,7 @@
         "height": 1088,
         "fps": 30,
         "exposure_us": 59000,
-        "iso": 1600,
+        "iso": 50,
         "shm_name": "shm_cam_frame"
     },
     "mirror": {
@@ -17,12 +17,12 @@
     "vision": {
         "debug_view": true,
         "ball": {
-            "h_min": 2,
-            "h_max": 19,
-            "s_min": 245,
+            "h_min": 0,
+            "h_max": 57,
+            "s_min": 248,
             "s_max": 255,
-            "v_min": 106,
-            "v_max": 253,
+            "v_min": 161,
+            "v_max": 241,
             "min_area_px": 5,
             "max_area_px": 5000,
             "min_circularity": 0.1
