@@ -33,6 +33,18 @@ struct BoundsConfig {
   float dampingMargin;    // Weiches Abbremsen X cm vor der Linie
   float returnKp;         // P-Regler: Wie stark er zurück ins Feld zieht,
                           // falls er über die safeLine geschoben wurde.
+
+  // ── Predictive Braking ──
+  // Effektiver Damping-Margin = dampingMargin + speedLookAhead * |v_richtung_wand|
+  // → Je schneller in Richtung Wand, desto früher startet das Damping.
+  float speedLookAhead;   // Sekunden Vorausblick (z.B. 0.15)
+
+  // ── Eigene Penalty Area (an -Y, eigenes Tor) ──
+  // PA = { |x| < penaltyHalfWidth, py < -yLimit + penaltyDepth }
+  float penaltyHalfWidth; // halbe Breite (X) der Penalty Area
+  float penaltyDepth;     // wie tief sie ins Feld reicht (Y, von -yLimit)
+  float penaltyExitSpeed; // Aktive Mindest-Auswurf-Geschwindigkeit nach +Y
+  float penaltyExitKp;    // tiefenabhängiger Zusatz-Schub (≥ returnKp)
 };
 
 void applyFieldBounds(Vec2& cmd, float px, float py, const BoundsConfig& cfg);
